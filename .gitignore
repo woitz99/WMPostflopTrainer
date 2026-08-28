@@ -1,0 +1,14 @@
+# Eigene Handhistorien. Die Dateien enthalten Nicknames und aufgedeckte
+# Karten anderer Spieler — die gehoeren nicht in ein oeffentliches Repo.
+# Der Smoke-Test ueberspringt die davon abhaengigen Pruefungen, wenn der
+# Ordner fehlt, die Suite laeuft also auch auf einem frischen Clone gruen.
+Samples/
+*.xml
+
+# Lokale Werkzeugeinstellungen
+.claude/settings.local.json
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+desktop.ini

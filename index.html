@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pokertrainer — MTT</title>
+
+<!-- PWA. Alle Pfade relativ: auf GitHub Pages liegt die App unter
+     /<repo>/ und nicht unter /. Ein fuehrender Slash startet sie leer. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e1512">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="MTT-Postflop-Training: Drills, Range-Designer, ICM und Session-Auswertung. Laeuft offline, alle Daten bleiben auf dem Geraet.">
+
+<!-- iOS kennt das Manifest nur halb; Home-Bildschirm braucht diese drei. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pokertrainer">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+
+<link rel="stylesheet" href="css/style.css?v=34">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">♠ Pokertrainer <span class="sub">MTT</span></div>
+  <nav class="tabs">
+    <button class="tab active" data-view="trainer">Trainer</button>
+    <button class="tab" data-view="plan">Plan</button>
+    <button class="tab" data-view="haende">Hände</button>
+    <button class="tab" data-view="range">Range</button>
+    <button class="tab" data-view="rechnen">Rechnen</button>
+    <button class="tab" data-view="session">Session</button>
+    <button class="tab" data-view="eigene">Eigene Hände</button>
+    <button class="tab" data-view="analyse">Analyse</button>
+    <button class="tab" data-view="prozess">Prozess</button>
+    <button class="tab" data-view="stats">Statistik</button>
+  </nav>
+  <button id="btnReview" class="ghost" hidden>⟳ Wiederholen <b id="reviewCount">0</b></button>
+  <button id="btnSettings" class="ghost">⚙ Einstellungen</button>
+</header>
+
+<!-- ============================ TRAINER ============================ -->
+<main id="view-trainer" class="view active">
+
+  <section class="reviewbar" id="reviewBar" hidden>
+    <div>
+      <b>Wiederholung</b> <span id="reviewProgress" class="muted"></span>
+      <div class="muted" id="reviewWhy"></div>
+    </div>
+    <button class="ghost small" id="btnExitReview">Zurück zum Training</button>
+  </section>
+
+  <section class="spotbar">
+    <div class="spot-name" id="spotName">—</div>
+    <div class="spot-meta">
+      <span class="chip" id="chipTag">—</span>
+      <span class="chip" id="chipStack">—</span>
+      <span class="chip" id="chipPot">—</span>
+      <span class="chip" id="chipSpr">—</span>
+      <span class="chip" id="chipPos">—</span>
+      <span class="chip" id="chipProfile" hidden>—</span>
+    </div>
+  </section>
+  <div class="story" id="spotStory"></div>
+
+  <section class="table-area">
+    <div class="street-label" id="streetLabel">FLOP</div>
+    <div class="board" id="board"></div>
+    <div class="hero-line">
+      <span class="lbl">Deine Hand</span>
+      <div class="board small" id="heroHand"></div>
+      <span class="handclass" id="heroClass"></span>
+    </div>
+    <div class="actionlog" id="actionLog"></div>
+  </section>
+
+  <!-- Frage -->
+  <section class="ask" id="askBox">
+    <div class="ask-title" id="askTitle">Deine Aktion?</div>
+    <div class="opts" id="opts"></div>
+    <div class="hintrow">
+      <button class="ghost small" id="btnHint">💡 Hinweis (Board & Ranges anzeigen)</button>
+      <span class="muted" id="calcNote"></span>
+    </div>
+    <div class="hintbox" id="hintBox" hidden></div>
+  </section>
+
+  <!-- Feedback -->
+  <section class="feedback" id="feedback" hidden>
+    <div class="verdict" id="verdict"></div>
+    <div class="scorebars" id="scorebars"></div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h3>1 · Board & Ranges</h3>
+        <div id="fbBoard"></div>
+      </div>
+      <div class="panel">
+        <h3>2 · Was kann er haben?</h3>
+        <div id="fbVillain"></div>
+      </div>
+      <div class="panel">
+        <h3>3 · Deine relative Handstärke</h3>
+        <div id="fbHero"></div>
+      </div>
+      <div class="panel">
+        <h3>4 · Die Nuts auf diesem Board</h3>
+        <div id="fbNuts"></div>
+      </div>
+    </div>
+
+    <div class="panel wide">
+      <h3>5 · Warum — der Denkprozess</h3>
+      <ul class="reasons" id="fbReasons"></ul>
+    </div>
+
+    <div class="navrow">
+      <button class="primary" id="btnNext">Weiter ▸</button>
+      <button class="ghost" id="btnSkip">Neue Hand ⟳</button>
+    </div>
+  </section>
+
+  <section class="handend" id="handEnd" hidden>
+    <div id="handEndText"></div>
+    <button class="primary" id="btnNewHand">Nächste Hand ▸</button>
+  </section>
+</main>
+
+<!-- ============================ PLAN ================================ -->
+<main id="view-plan" class="view">
+  <div id="planOut"></div>
+</main>
+
+<!-- ============================ HÄNDE ============================== -->
+<main id="view-haende" class="view">
+  <section class="panel wide">
+    <h3>Hand-Steckbriefe</h3>
+    <p class="muted hpintro">Die Tabelle sagt dir, <i>welche</i> Hände du spielst. Sie sagt nie, warum die
+      Grenze dort liegt und was nach dem Flop passiert. Hier läuft die Rechnung andersherum: eine Hand
+      gegen alle 19.600 Flops. Das Raster ist der Einstieg, nicht die Antwort — die Erklärung darunter
+      gilt jeweils für den ganzen Archetyp.</p>
+    <div class="hpcontrols">
+      <label>Gegner-Range
+        <select id="hpRange"></select>
+      </label>
+      <label>Ansicht
+        <select id="hpColor">
+          <option value="arche">Archetypen einfärben</option>
+          <option value="err">Deine Fehlerquote einfärben</option>
+        </select>
+      </label>
+    </div>
+    <div class="hpgridwrap"><div class="hpgrid" id="hpGrid"></div></div>
+    <div class="hplegend" id="hpLegend"></div>
+    <div class="muted hpgridnote">Diagonale = Pockets · oben rechts = suited · unten links = offsuit.
+      <b>•</b> markiert Hände, mit denen du im Trainer Fehler gemacht hast, <b>✎</b> eigene Notizen.</div>
+  </section>
+  <div id="hpOut"></div>
+</main>
+
+<!-- ============================ RANGE-DESIGNER ====================== -->
+<main id="view-range" class="view">
+  <section class="panel wide">
+    <h3>Range-Designer — Push/Fold mit ICM</h3>
+    <p class="muted hpintro">Chips sind im Turnier nicht linear. Die Chips, die du gewinnst, sind
+      weniger wert als die, die du verlierst — deshalb ist ein Shove, der in Chips klar +EV ist, an
+      der Bubble oft ein Fehler. Hier steht die Situation, wie du sie am Tisch siehst, und darunter,
+      was sich damit noch shoven lässt.</p>
+    <div class="rdgrid">
+      <label>Dein Stack (bb) <input id="rdHero" type="number" value="5" min="1" max="40" step="0.5"></label>
+      <label>Spieler übrig <input id="rdLeft" type="number" value="100" min="3" max="1000" step="1"></label>
+      <label>Bis zur Bubble noch <input id="rdBubble" type="number" value="3" min="0" max="200" step="1"></label>
+      <label>Durchschnittsstack (bb) <input id="rdAvg" type="number" value="25" min="3" max="200" step="1"></label>
+      <label>Davon Shorties <input id="rdShorts" type="number" value="10" min="0" max="200" step="1"></label>
+      <label>Shorty-Stack (bb) <input id="rdShortBB" type="number" value="8" min="1" max="40" step="0.5"></label>
+      <label>Spieler hinter dir <input id="rdBehind" type="number" value="4" min="1" max="8" step="1"></label>
+    </div>
+    <div class="planactions">
+      <button class="primary" id="rdRun">Range berechnen ▸</button>
+      <button class="ghost" id="rdBubbleNow">Bubble, andere sind kürzer</button>
+      <button class="ghost" id="rdShortest">Bubble, du bist der Kürzeste</button>
+      <button class="ghost" id="rdDeep">Früh im Turnier</button>
+      <span class="muted" id="rdNote"></span>
+    </div>
+  </section>
+  <div id="rdOut"></div>
+</main>
+
+<!-- ============================ RECHNEN ============================= -->
+<main id="view-rechnen" class="view">
+  <section class="panel wide">
+    <h3>Kopfrechnen — Pot Odds, MDF, Sizings</h3>
+    <p class="muted hpintro">Online rechnet das Tool mit. Live hast du 30 Sekunden, kein HUD und
+      Jetons statt Prozente. Die Aufgaben kommen deshalb mit echten Chipbeträgen aus deiner
+      Turnierstruktur — 12.500 statt 100.</p>
+    <div class="mtbar">
+      <div class="mtscore"><b id="mtRight">0</b> von <b id="mtTotal">0</b> · <span id="mtPct">—</span>
+        <span class="muted" id="mtStreak"></span></div>
+      <label class="mtsel">Phase
+        <select id="mtLevel">
+          <option value="19">Tag 1</option>
+          <option value="29">Tag 1–2</option>
+          <option value="39">Tag 1–3</option>
+          <option value="47">alle Level</option>
+        </select>
+      </label>
+      <button class="ghost small" id="mtReset">Zurücksetzen</button>
+    </div>
+  </section>
+
+  <section class="panel wide mtcard">
+    <div class="mttype" id="mtType">—</div>
+    <div class="mtq" id="mtQ">—</div>
+    <div class="mtopts" id="mtOpts"></div>
+    <div class="mtfb" id="mtFb" hidden></div>
+    <div class="navrow"><button class="primary" id="mtNext" hidden>Nächste ▸</button></div>
+  </section>
+
+  <section class="panel wide">
+    <h3>Sizings in Chips</h3>
+    <p class="muted" style="font-size:.88rem">Was ein 33-%-C-Bet auf diesem Level konkret bedeutet.
+      Open = 2,2× BB, Pot danach = Open × 2 + SB + Ante (heads-up gegen einen Caller).</p>
+    <label class="mtsel" style="max-width:220px">Tag
+      <select id="szDay"><option value="1">Tag 1</option><option value="2">Tag 2</option><option value="3">Tag 3</option><option value="4">Tag 4</option></select>
+    </label>
+    <div id="szOut"></div>
+  </section>
+</main>
+
+<!-- ============================ SESSION ============================= -->
+<main id="view-session" class="view">
+  <section class="panel wide">
+    <h3>Sessions auswerten</h3>
+    <p class="muted hpintro">Deine win2day-Handhistorien als XML. Die Dateien werden
+      <b>lokal im Browser</b> gelesen und nirgendwohin geschickt — die App hat keine Netzverbindung.
+      Mehrere Dateien auf einmal auswählen lohnt sich: eine einzelne Session hat rund 200 Hände,
+      und das ist für Frequenzen wie VPIP oder C-Bet viel zu wenig.</p>
+    <div class="planactions">
+      <label class="primary wsfile">Dateien wählen …
+        <input type="file" id="wsFile" accept=".xml" multiple hidden>
+      </label>
+      <button class="ghost" id="wsClear">Gespeicherte Sessions löschen</button>
+      <span class="muted" id="wsNote"></span>
+    </div>
+  </section>
+  <div id="wsOut"></div>
+</main>
+
+<!-- ======================= EIGENE HÄNDE ========================= -->
+<main id="view-eigene" class="view">
+  <section class="panel wide">
+    <h3>Eigene Hände nachspielen</h3>
+    <p class="muted hpintro">Feste Spots aus deiner eigenen Historie — Board, Karten, Positionen
+      und Bet-Größen stehen exakt so, wie sie gespielt wurden. Nur die Entscheidung ist offen.
+      Die Empfehlung wird gerechnet, nicht gesetzt: nötige Equity aus den Pot Odds, deine Equity
+      gegen eine <b>benannte</b> Gegner-Range, die unter jeder Entscheidung aufklappbar dasteht.
+      Wer die Range anders sieht, bekommt eine andere Empfehlung — sie ist die Annahme, nicht das Ergebnis.</p>
+  </section>
+  <div class="ownwrap">
+    <nav class="ownlist" id="ownList"></nav>
+    <div id="ownOut"></div>
+  </div>
+</main>
+
+<!-- ============================ ANALYSE ============================ -->
+<main id="view-analyse" class="view">
+  <section class="panel wide">
+    <h3>Freie Analyse (Flopzilla-Modus)</h3>
+    <div class="formgrid">
+      <label>Board <input id="anBoard" placeholder="z.B. Kh 7d 2c  oder  Kh7d2c9s"></label>
+      <label>Deine Hand <input id="anHero" placeholder="z.B. AhKd"></label>
+      <label>Deine Range <textarea id="anHeroRange" rows="2"></textarea></label>
+      <label>Gegner-Range <textarea id="anVillRange" rows="2"></textarea></label>
+      <label>Preset
+        <select id="anPreset"></select>
+      </label>
+      <label>Pot (bb) <input id="anPot" type="number" value="5.9" step="0.1"></label>
+      <label>Eff. Stack (bb) <input id="anEff" type="number" value="45.8" step="0.1"></label>
+    </div>
+    <button class="primary" id="btnAnalyse">Analysieren</button>
+  </section>
+  <div id="anOut"></div>
+</main>
+
+<!-- ============================ PROZESS ============================ -->
+<main id="view-prozess" class="view">
+  <section class="panel wide prose">
+    <h2>Preflop — die Reihenfolge der Fragen</h2>
+    <p class="muted">Preflop entscheidet sich mehr Geld als postflop, weil jede Hand hier durchläuft.
+      Die Reihenfolge ist nicht beliebig: <b>Stack vor Position vor Gegner vor Karten.</b> Wer mit den
+      Karten anfängt, hat die wichtigste Information schon übersprungen.</p>
+
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div>
+        <h3>Wie tief bin ich? — der Stack bestimmt, welches Spiel überhaupt gespielt wird</h3>
+        <table class="sizing">
+          <tr><th>Stack</th><th>Was möglich ist</th><th>Was zählt</th></tr>
+          <tr><td><b>&lt; 12bb</b></td><td>nur noch shove or fold</td><td>rohe Equity und Fold-Equity. Verbundenheit ist wertlos, es gibt kein Postflop.</td></tr>
+          <tr><td><b>12–25bb</b></td><td>Raise/Fold, Shove, kaum Calls</td><td>Wenn dein Open dich schon zu 40 % committet, ist es faktisch ein Shove. Dann shove lieber gleich.</td></tr>
+          <tr><td><b>25–50bb</b></td><td>volles Spiel, aber SPR bleibt klein</td><td>3-Bets werden zur Hauptwaffe. Flat-Calls verlieren an Wert, weil implizite Odds fehlen.</td></tr>
+          <tr><td><b>&gt; 50bb</b></td><td>alles</td><td>Jetzt zahlen sich Spielbarkeit und Position aus: suited, verbunden, IP.</td></tr>
+        </table>
+        <p class="tip">Frage: <b>„Wie viele Entscheidungen habe ich nach dieser noch?"</b> Bei einer
+          einzigen gibt es keine spekulativen Hände mehr — nur noch Equity.</p>
+      </div></div>
+
+      <div class="step"><div class="n">2</div><div>
+        <h3>Wie viele sitzen hinter mir? — Position ist der zweitgrößte Hebel</h3>
+        <p>Jeder Spieler hinter dir ist eine weitere Chance, dass jemand eine Hand hat. Deshalb ist
+          dieselbe Hand UTG ein Fold und am Button ein Raise — <b>nicht</b>, weil sie schwächer wird,
+          sondern weil sie öfter auf Widerstand trifft.</p>
+        <p>Das lässt sich beziffern. Angenommen jeder hinter dir spielt weiter mit 15 %:</p>
+        <ul>
+          <li><b>1 Gegner hinter dir:</b> in 85 % läuft es glatt durch</li>
+          <li><b>3 Gegner:</b> nur noch 61 %</li>
+          <li><b>6 Gegner:</b> 38 % — in fast zwei von drei Fällen kommt Gegenwehr</li>
+        </ul>
+        <p class="tip">Und: Position gilt auch <i>nach</i> dem Flop. Aus dem BB spielst du jede Hand
+          ohne Position — deshalb ist deine Defense-Range dort breiter, aber deine Gewinnrate trotzdem
+          negativ. Du verteidigst, um weniger zu verlieren, nicht um zu gewinnen.</p>
+      </div></div>
+
+      <div class="step"><div class="n">3</div><div>
+        <h3>Wer sitzt da? — vor den Karten, nicht danach</h3>
+        <ul>
+          <li><b>Tighte Blinds:</b> stehlen wird breiter profitabel, fast unabhängig von den Karten.</li>
+          <li><b>Ein Recreational hinter dir:</b> enger stehlen, dafür mehr Value-Hände isolieren. Gegen jemanden, der zu viel callt, willst du Hände, die <i>treffen</i> — nicht Hände, die <i>Fold-Equity</i> brauchen.</li>
+          <li><b>Aggressiver Reg hinter dir:</b> deine Randhände werden von 3-Bets bestraft. Entweder enger öffnen oder bereit sein, 4-Bet-Bluffs zu spielen.</li>
+          <li><b>Kurze Stacks hinter dir:</b> deren Shoves sind billig und häufig. Dein Open braucht Hände, die einen Shove callen können.</li>
+        </ul>
+        <p class="tip">Frage: <b>„Was passiert wahrscheinlich, nachdem ich raise?"</b> Wenn die
+          häufigste Antwort „ich muss folden" ist, war es kein Raise.</p>
+      </div></div>
+
+      <div class="step"><div class="n">4</div><div>
+        <h3>ICM — steht das Turnier gerade auf dem Spiel?</h3>
+        <p>Nur relevant nahe an Payjumps und an der Bubble, dort aber dominant. Chips, die du
+          gewinnst, sind weniger wert als die, die du verlierst.</p>
+        <ul>
+          <li><b>Du bist kurz, andere sind kürzer:</b> dein bester Freund ist deren Bustout. Marginale Spots auslassen.</li>
+          <li><b>Du bist mittel, ein Big Stack attackiert:</b> das ist der teuerste Spot im Turnier. Enger callen, als es sich anfühlt.</li>
+          <li><b>Du bist der Big Stack:</b> der einzige, der billig Druck machen kann — und der häufigste Fehler ist, das nicht zu tun.</li>
+        </ul>
+        <p class="tip">Der Tab <b>Range</b> rechnet das für deine konkrete Situation aus, statt es zu schätzen.</p>
+      </div></div>
+
+      <div class="step"><div class="n">5</div><div>
+        <h3>Erst jetzt: die Karten — und die richtige Frage dazu</h3>
+        <p>Nicht „ist die Hand gut genug?", sondern <b>„welche Rolle spielt sie in meiner Range?"</b>
+          Jede Hand ist entweder Value, Bluff oder gehört gar nicht rein.</p>
+        <ul>
+          <li><b>Value:</b> will gecallt werden. Danach wählst du die große Größe.</li>
+          <li><b>Bluff:</b> braucht Blocker und Restequity. A5s ist ein besserer 3-Bet-Bluff als A9s — es blockt seine AA/AK und blockt <i>nicht</i>, was er wegwirft.</li>
+          <li><b>Weder noch:</b> folden. Die meisten Verluste entstehen mit Händen aus dieser Kategorie, die trotzdem gespielt wurden.</li>
+        </ul>
+        <p class="tip">Der Tab <b>Hände</b> zeigt für jede Handklasse, was sie am Flop tatsächlich
+          trifft — das ist die Grundlage dafür, ob sie Value oder Bluff sein kann.</p>
+      </div></div>
+    </div>
+
+    <h2>Der 5-Schritte-Prozess — jede Straße, jedes Mal</h2>
+    <p class="muted">Das ist der eigentliche Lerninhalt. Die Drills trainieren nur, diesen Ablauf schnell und automatisch zu machen. Ziel: unter 5 Sekunden pro Entscheidung.</p>
+
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div>
+        <h3>Board lesen — statisch oder dynamisch?</h3>
+        <p><b>Statisch</b> (K72 rainbow, A83 rainbow): Die beste Hand am Flop ist meist noch am River die beste. → <b>kleine Sizings (25–33%), sehr breit betten.</b></p>
+        <p><b>Dynamisch</b> (JT8 two-tone, 976ss): Die Nuts ändern sich noch. → <b>polarisieren, groß betten (70–85%)</b> mit Value + Draws, den Rest checken.</p>
+        <p class="tip">Frage: „Wenn ich jetzt die beste Hand habe — wie viele Karten machen mich zum Zweiten?"</p>
+      </div></div>
+
+      <div class="step"><div class="n">2</div><div>
+        <h3>Wem gehört das Board? — Range- vs Nut-Advantage</h3>
+        <p><b>Range-Advantage</b> = wessen Gesamtrange hat mehr Equity. Bestimmt <b>WIE OFT</b> du bettest.</p>
+        <p><b>Nut-Advantage</b> = wer hat mehr Sets/Straights/Flushes. Bestimmt <b>WIE GROSS</b> du bettest.</p>
+        <p>Faustregeln fürs Turnier:</p>
+        <ul>
+          <li><b>A-hoch / K-hoch Boards:</b> gehören dem Preflop-Raiser (er hat alle AK, AQ, AA, KK) → breit klein betten.</li>
+          <li><b>Niedrige verbundene Boards (765, 984):</b> gehören dem BB → als PFR viel checken.</li>
+          <li><b>Mittlere Boards (T85, J74):</b> geteilt → selektiv, IP mehr betten als OOP.</li>
+          <li><b>Gepaarte Boards (K72 mit 77, 883):</b> gehören dem breiteren Range-Spieler → kleine Sizings, hohe Frequenz.</li>
+        </ul>
+      </div></div>
+
+      <div class="step"><div class="n">3</div><div>
+        <h3>Relative Handstärke — nicht absolute</h3>
+        <p>„Top Pair" heißt nichts. Die Frage ist: <b>Wie viel % seiner Range schlage ich gerade?</b></p>
+        <ul>
+          <li><b>&gt; 80%</b> → Value: 3 Streets planen (auf statischen Boards) oder 2 große (dynamisch).</li>
+          <li><b>60–80%</b> → Medium: 1–2 kleine Bets oder Check/Call. <b>Niemals</b> einen großen Pot bauen.</li>
+          <li><b>40–60%</b> → Bluffcatcher: Check/Call gegen aggressive Gegner, Check/Fold gegen tighte.</li>
+          <li><b>&lt; 40% mit Draw</b> → Semibluff: betten. Du gewinnst sofort oder triffst.</li>
+          <li><b>&lt; 40% ohne Draw</b> → Aufgeben, außer du hast starke Blocker am River.</li>
+        </ul>
+        <p class="tip">Top Pair gegen eine EP-Open-Range ist ein Bluffcatcher. Top Pair gegen eine BTN-Open-Range ist eine Value-Hand. Gleiche Hand, andere Rolle.</p>
+      </div></div>
+
+      <div class="step"><div class="n">4</div><div>
+        <h3>SPR & Plan — bevor du bettest, weißt du schon den River</h3>
+        <p>SPR = Effektiver Stack ÷ Pot.</p>
+        <ul>
+          <li><b>SPR &lt; 2</b> (3-Bet-Pots, kurze Stacks): Eine Bet committet dich. Entscheide <b>jetzt</b>: Stack-off oder Check.</li>
+          <li><b>SPR 3–6</b> (Standard-SRP bei 40bb): Zwei Bets ≈ all-in. 60%-70% Flop + Turn-Jam ist eine saubere Linie.</li>
+          <li><b>SPR &gt; 8</b> (Deep): Drei Streets nötig. Sizing klein halten oder geometrisch: je ~60% Pot pro Straße.</li>
+        </ul>
+        <p class="tip">Frage vor jeder Bet: <b>„Was mache ich, wenn er raist? Was bette ich am Turn? Welche Karten stoppen mich?"</b> Wer das nicht beantworten kann, sollte checken.</p>
+      </div></div>
+
+      <div class="step"><div class="n">5</div><div>
+        <h3>Sizing wählen — 3 Größen reichen</h3>
+        <table class="sizing">
+          <tr><th>Größe</th><th>Wann</th><th>Mit was</th></tr>
+          <tr><td><b>25–33%</b></td><td>statisches Board, du hast Range-Advantage, kein Nut-Advantage nötig</td><td>fast deine ganze Range</td></tr>
+          <tr><td><b>50–60%</b></td><td>mittlere Boards, du willst Draws bezahlen lassen, SPR mittel</td><td>Value + Draws</td></tr>
+          <tr><td><b>75–100%</b></td><td>dynamisches Board, du hast Nut-Advantage, 3-Bet-Pot</td><td>polar: Top-Value + beste Bluffs</td></tr>
+          <tr><td><b>Overbet</b></td><td>Range ist polarisiert, seine ist gecappt (z.B. Turn-Blank nach Flop-Check)</td><td>Nuts + Blocker-Bluffs</td></tr>
+        </table>
+        <p class="tip">Turnier-Vereinfachung: Nimm <b>33% als Default</b> und wechsle nur bewusst auf <b>75%</b>, wenn Board dynamisch ist ODER du im 3-Bet-Pot bist. Das allein ist besser als das, was 90% der Turnierspieler machen.</p>
+      </div></div>
+    </div>
+
+    <h2>Defense-Kurzregeln (gegen Bets)</h2>
+    <ul>
+      <li><b>MDF:</b> gegen 33% musst du 75% verteidigen, gegen 50% → 67%, gegen 75% → 57%, gegen Pot → 50%.</li>
+      <li>Gegen <b>kleine</b> Bets: weit callen, wenig raisen (seine Range ist breit und stark durchmischt).</li>
+      <li>Gegen <b>große</b> Bets: eng callen, aber mit den Händen raisen, die seine Value-Range blocken.</li>
+      <li>Rechne Equity <b>gegen seine Bet-Range</b>, nicht gegen seine Preflop-Range. Das ist der häufigste Fehler.</li>
+      <li>OOP realisierst du ~10% weniger Equity → brauchst mehr als die reinen Pot Odds.</li>
+    </ul>
+
+    <h2>Die teuersten Fehler von Turnierspielern</h2>
+    <p class="muted">Sortiert nach Kosten, nicht nach Häufigkeit. Zu jedem: die Frage, die ihn bei dir
+      verhindert — und woran du ihn bei anderen erkennst und wie du ihn bestrafst.</p>
+
+    <table class="sizing leaks">
+      <tr><th>Fehler</th><th>Deine Frage dagegen</th><th>Bei anderen ausnutzen</th></tr>
+      <tr>
+        <td><b>1 · Mit Mittelstack an der Bubble abheben</b><br>
+          <span class="muted">99 oder AJo gegen den Big-Stack-Shove callen, obwohl zwei Kürzere am Tisch sitzen. Der teuerste einzelne Fehler im Turnierpoker.</span></td>
+        <td>„Gibt es hier jemanden, der <b>vor mir</b> ausscheidet, wenn ich einfach nichts tue?" Wenn ja, brauchst du deutlich mehr als die Pot Odds.</td>
+        <td>Gegen Mittelstacks an der Bubble <b>viel breiter shoven</b> — sie können fast nichts callen. Das ist der profitabelste Spot, den ein Turnier bietet.</td>
+      </tr>
+      <tr>
+        <td><b>2 · Als Big Stack an der Bubble tight spielen</b><br>
+          <span class="muted">Fühlt sich sicher an, ist der teuerste Fehler des Chipleaders. Er ist der Einzige, der ohne Risiko Druck machen kann — und tut es nicht.</span></td>
+        <td>„Was kostet es mich <b>maximal</b>, wenn das schiefgeht?" Als Chipleader gegen Mittelstacks: nie dein Turnier.</td>
+        <td>Wenn der Big Stack passiv ist, kannst du selbst als Mittelstack wieder mehr stehlen. Sein Nicht-Druck gibt allen anderen Luft.</td>
+      </tr>
+      <tr>
+        <td><b>3 · Als Shorty auf ein Wunder warten</b><br>
+          <span class="muted">Mit 6bb Hände wegwerfen, die klar +EV shoven, weil „gleich bustet einer". Zwei Umläufe später sind es 3bb und die Fold-Equity ist weg.</span></td>
+        <td>„Habe ich in der nächsten Umlaufbahn noch <b>Fold-Equity</b>?" Unter 8bb callt er dich mit allem — dann war der Shove vorher der letzte gute Moment.</td>
+        <td>Gegen wartende Shorties die Blinds häufiger angreifen: sie folden zu viel, weil sie auf einen besseren Spot hoffen, den es nicht gibt.</td>
+      </tr>
+      <tr>
+        <td><b>4 · Equity gegen die falsche Range rechnen</b><br>
+          <span class="muted">„Ich schlage 70 % seiner Hände" — gegen seine <i>Preflop</i>-Range. Gegen die Range, die gerade eine große Bet gemacht hat, sind es 30 %.</span></td>
+        <td>„Mit welchen Händen macht er <b>genau diese Aktion</b>?" Nicht: welche Hände hat er überhaupt.</td>
+        <td>Gegen Spieler mit diesem Leak funktionieren große Bets und Overbets überdurchschnittlich: sie bezahlen mit Händen, die gegen deine Bet-Range chancenlos sind.</td>
+      </tr>
+      <tr>
+        <td><b>5 · Kleine Paare als Set-Mining-Hände spielen</b><br>
+          <span class="muted">Cash-Game-Denken bei Turnierstacks. Unter ~40bb zahlen die impliziten Odds die sieben Fehlversuche nicht mehr.</span></td>
+        <td>„Wenn ich mein Set treffe — <b>wie viel kann ich überhaupt noch gewinnen</b>?" Bei 8bb Call und 32bb dahinter: zu wenig.</td>
+        <td>Gegen Set-Miner am gepaarten oder niedrigen Board dünn Value betten — sie geben ohne Set sofort auf und haben keine Bluffs.</td>
+      </tr>
+      <tr>
+        <td><b>6 · Auf jedem Flop c-betten</b><br>
+          <span class="muted">Die alte 100-%-C-Bet ist ein dokumentierter Leak. Auf niedrigen verbundenen Boards gehört das Board dem BB, nicht dir.</span></td>
+        <td>„<b>Wem gehört dieses Board?</b>" Auf 765 hast du als Preflop-Raiser weniger Sets und Straights als er.</td>
+        <td>Gegen Auto-C-Better auf genau diesen Boards check-raisen. Ihre Range ist dort viel schwächer als ihre Bet aussagt.</td>
+      </tr>
+      <tr>
+        <td><b>7 · Zu früh ICM spielen</b><br>
+          <span class="muted">Der Spiegelfehler zu Nr. 1: Schon 200 Plätze vor dem Geld vorsichtig werden. Dort sind Chips fast linear, und Vorsicht kostet nur Equity.</span></td>
+        <td>„Ist der nächste Payjump <b>in Reichweite</b>?" Wenn nein, spiel Chip-EV und häufe an.</td>
+        <td>Früh im Turnier gegen überängstliche Gegner konsequent stehlen — sie geben Chips ab, für die es noch gar keinen Payjump gibt.</td>
+      </tr>
+      <tr>
+        <td><b>8 · Immer dieselbe Bet-Größe</b><br>
+          <span class="muted">„2/3 Pot" auf jedem Board. Verschenkt auf trockenen Boards Frequenz und auf nassen Boards Schutz.</span></td>
+        <td>„Ist dieses Board <b>statisch oder dynamisch</b>?" Danach die Größe, nicht nach der eigenen Handstärke.</td>
+        <td>Wer immer gleich groß bettet, ist trivial lesbar: seine Range ist auf jedem Board dieselbe Mischung. Gegen kleine Sizings weit verteidigen, gegen große eng.</td>
+      </tr>
+      <tr>
+        <td><b>9 · Sizing an der eigenen Handstärke ausrichten</b><br>
+          <span class="muted">Groß mit stark, klein mit schwach. Der klassische Anfängertell, der auch bei erfahrenen Live-Spielern überlebt.</span></td>
+        <td>„Würde ich mit meinen <b>Bluffs</b> hier genauso groß betten?" Wenn nein, ist die Größe falsch.</td>
+        <td>Der lukrativste Live-Read überhaupt. Notiere zwei Sizings pro Gegner — die Zuordnung ist meist innerhalb einer Stunde klar.</td>
+      </tr>
+      <tr>
+        <td><b>10 · Früh im Turnier awkward Stacks bauen</b><br>
+          <span class="muted">Marginale Calls und Floats, die dich mit 18bb statt 30bb in die mittlere Phase schicken — wo Fehler ein Vielfaches kosten.</span></td>
+        <td>„Führt diese Hand zu einem <b>Stack, mit dem ich spielen kann</b>?"</td>
+        <td>—</td>
+      </tr>
+    </table>
+
+    <p class="tip"><b>Wenn du nur drei Fragen mitnimmst:</b> „Wem gehört dieses Board?", „Mit welchen
+      Händen macht er genau diese Aktion?" und an der Bubble „Scheidet hier jemand vor mir aus, wenn
+      ich nichts tue?" Diese drei decken den Großteil der Kosten oben ab.</p>
+
+    <h2>Mehrweg-Pots — warum es dafür kaum Theorie gibt</h2>
+    <p>Für Heads-up gibt es Solver und damit eine Referenz. Für Mehrweg nicht, und das hat einen
+      handfesten Grund: Mit dem dritten Spieler wächst der Spielbaum nicht linear, sondern explodiert —
+      jede Aktion muss gegen zwei Gegner beantwortet werden, die wiederum aufeinander reagieren.
+      Schlimmer noch: ein Mehrweg-Gleichgewicht ist nicht einmal eindeutig, weil zwei Gegner sich
+      implizit gegen dich koordinieren können, ohne es abzusprechen. Es gibt also nicht <i>die</i>
+      richtige Mehrweg-Strategie, gegen die man messen könnte.</p>
+    <p class="tip">Was daraus <b>nicht</b> folgt: dass man nichts rechnen kann. Zwei Größen sind
+      exakt bestimmbar, ganz ohne Gleichgewicht — und die tragen fast die ganze Entscheidung.</p>
+    <p>Genau diese zwei Größen rechnet der Trainer inzwischen live. Im Tab <i>Trainer</i> gibt es
+      Mehrweg-Spots (Spot-Typ <b>MW</b> in den Einstellungen): CO gegen BTN+BB, eingeklemmt im BB,
+      mit Position gegen zwei, und der Limped Pot. Jeder Gegner behält dabei seine <b>eigene</b>
+      Range — das Feld wird nicht zu einem Durchschnittsgegner verschmolzen. Die Rückmeldung zeigt
+      dir je Gegner die Verteilung und darunter die Zahl, auf die es ankommt: wie oft
+      <b>mindestens einer</b> von beiden Two-Pair-oder-besser hat.</p>
+    <p class="tip"><b>Bewusste Grenze:</b> Mehrweg wird als <b>Flop-Drill</b> trainiert, Turn und
+      River werden nicht simuliert. Dafür bräuchte es eine echte Mehrspieler-Aktionslogik, und die
+      steckt nicht drin — lieber eine ehrliche Lücke als eine erfundene Zahl.</p>
+
+    <h2>1 · Equity fällt schneller, als es sich anfühlt</h2>
+    <p>Equity gegen zwei Gegner ist <b>nicht</b> das Produkt der beiden Einzel-Equities: die
+      Gegnerhände schließen sich gegenseitig aus und teilen sich dasselbe Board. Das lässt sich nur
+      simulieren, nicht multiplizieren. Die Tabelle unten ist genau so entstanden — Board
+      K♦ 9♥ 4♠, Gegner mit einer Weiterspiel-Range, 25.000 Simulationen je Feld:</p>
+    <table class="sizing">
+      <tr><th>Deine Hand</th><th>1 Gegner</th><th>2 Gegner</th><th>3 Gegner</th><th>Verlust</th></tr>
+      <tr><td><b>Set</b></td><td>94 %</td><td>89 %</td><td>85 %</td><td class="mwkeep">−9</td></tr>
+      <tr><td>kleines Set</td><td>92 %</td><td>85 %</td><td>79 %</td><td class="mwkeep">−13</td></tr>
+      <tr><td>Gutshot + Backdoor</td><td>33 %</td><td>25 %</td><td>21 %</td><td class="mwkeep">−12</td></tr>
+      <tr><td>Top Pair, bester Kicker</td><td>84 %</td><td>70 %</td><td>60 %</td><td class="mwlose">−24</td></tr>
+      <tr><td>zwei Overcards</td><td>42 %</td><td>21 %</td><td>14 %</td><td class="mwlose">−27</td></tr>
+      <tr><td><b>Top Pair, schwacher Kicker</b></td><td>73 %</td><td>54 %</td><td>42 %</td><td class="mwlose">−31</td></tr>
+      <tr><td>fairer Anteil</td><td>50 %</td><td>33 %</td><td>25 %</td><td>—</td></tr>
+    </table>
+    <p><b>Das ist die eigentliche Regel</b>, und sie lautet nicht „vorsichtiger spielen". Sie lautet:
+      es kommt auf den <i>Handtyp</i> an. Ein Set verliert von einem auf drei Gegner nur 9 Punkte,
+      Top Pair mit schwachem Kicker 31. Nut-Hände überleben Mehrweg fast unverändert, weil sie
+      ohnehin fast alles schlagen. Alles Mittelmäßige bricht ein — es wird von jedem zusätzlichen
+      Gegner ein weiteres Mal bedroht.</p>
+    <p class="tip">Merksatz: <b>Mehrweg zählt nicht, wie stark deine Hand ist, sondern wie weit oben
+      sie steht.</b> Zweitbeste Hände sind der Grund, warum Mehrweg-Pots teuer werden.</p>
+
+    <h2>2 · Fold-Equity potenziert sich nach unten</h2>
+    <p>Ein Bluff muss <b>alle</b> zum Folden bringen. Foldet jeder Einzelne mit 60 %, folden zwei
+      zusammen nur in 36 % der Fälle und drei in 22 %. Umgekehrt gerechnet: eine Bet von 65 % des
+      Pots muss in 39 % der Fälle durchgehen. Verteilt auf mehrere Gegner heißt das, jeder Einzelne
+      müsste folden mit</p>
+    <table class="sizing">
+      <tr><th>Gegner</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+      <tr><td>jeder muss folden mit</td><td>39 %</td><td>63 %</td><td>73 %</td><td>79 %</td></tr>
+    </table>
+    <p>73 % Fold-Rate gegen eine Zwei-Drittel-Bet gibt es nicht — nicht bei Spielern, die es bis
+      hierher geschafft haben. Deshalb ist die Antwort auf „soll ich mehrweg bluffen?" fast immer
+      nein, und zwar nicht aus Vorsicht, sondern aus Arithmetik.</p>
+
+    <h2>3 · Wie du am Tisch vorgehst</h2>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div>
+        <h3>Zähl die Gegner, bevor du die Karten ansiehst</h3>
+        <p>Die Zahl der Gegner ändert mehr als das Board. Bei zwei Gegnern brauchst du für eine
+          Value-Bet rund <b>48 %</b> Equity, bei drei rund <b>40 %</b> — jeweils der faire Anteil
+          plus Puffer, weil die Weiterspiel-Range immer stärker ist als die Gesamtrange.</p>
+      </div></div>
+      <div class="step"><div class="n">2</div><div>
+        <h3>Sortiere deine Hand in eine von drei Schubladen</h3>
+        <p><b>Nuts-nah</b> (Set, Straight, Flush, Two Pair aus eigenen Karten) → setzen, groß,
+          und zwar auf allen Straßen. Mehrweg wird häufiger gecallt, dünner Value ist unnötig.</p>
+        <p><b>Nut-Draw</b> (Nut-Flushdraw, OESD zur Oberkante) → setzen oder callen, je nach Odds.
+          Das Nut-Potenzial ist das, was mehrweg noch bezahlt wird.</p>
+        <p><b>Alles andere</b> → checken. Top Pair mit mittlerem Kicker, Ass-hoch, blanke
+          Overcards: das sind mehrweg Showdown-Hände, keine Setz-Hände.</p>
+      </div></div>
+      <div class="step"><div class="n">3</div><div>
+        <h3>Kein Protection-Argument</h3>
+        <p>„Ich muss setzen, damit sie nicht billig ziehen" funktioniert heads-up. Mehrweg
+          verlierst du damit gegen die Hände, die weiterspielen, und gewinnst gegen die, die
+          ohnehin gefoldet hätten. Gegen drei Gegner kannst du niemanden mehr hinausbezahlen.</p>
+      </div></div>
+      <div class="step"><div class="n">4</div><div>
+        <h3>Position wird mehr wert, nicht weniger</h3>
+        <p>Mehrweg gibt es mehr Information zu sammeln — und mehr Möglichkeiten, sie falsch zu
+          deuten. Aus früher Position ist die Range der Spieler hinter dir zusammen so breit, dass
+          fast jede marginale Hand zum Check wird.</p>
+      </div></div>
+    </div>
+
+    <h2>4 · Selber nachrechnen</h2>
+    <p class="muted">Board und Hand eintragen, Zahl der Gegner wählen. Gerechnet wird gegen eine
+      Weiterspiel-Range je Gegner, per Simulation — kein Gleichgewicht, nur Wahrscheinlichkeit.</p>
+    <div class="formgrid">
+      <label>Board <input id="mwBoard" placeholder="z.B. Kd9h4s" value="Kd9h4s"></label>
+      <label>Deine Hand <input id="mwHand" placeholder="z.B. AhKc" value="AhKc"></label>
+      <label>Gegner <select id="mwOpp"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+      <label>Pot <input id="mwPot" type="number" value="10000" step="100"></label>
+      <label>Bet (0 = keine) <input id="mwBet" type="number" value="6500" step="100"></label>
+    </div>
+    <button class="primary" id="mwRun">Rechnen ▸</button>
+    <div id="mwOut"></div>
+
+    <h2>Die drei Sätze, die im Turnier das meiste Geld bewegen</h2>
+    <p>Alles oben lässt sich auf drei Sätze eindampfen. Wenn du am Tisch nur diese drei parat hast,
+      spielst du bereits besser als der Großteil eines Day-1-Feldes.</p>
+
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div>
+        <h3>Shoven und Callen sind an der Bubble gegensätzlich</h3>
+        <p>Beim Shoven hilft dir der ICM-Druck der anderen — sie müssen folden, deine Fold-Equity
+          steigt. Beim Callen gibt es <b>keine</b> Fold-Equity, der ganze Druck wirkt gegen dich.
+          Deshalb sind es zwei völlig verschiedene Ranges, und wer sie verwechselt, verliert Turniere.</p>
+        <p class="tip">Als <b>kurzer Stack an der Bubble</b> callst du einen 8bb-Shove mit rund
+          <b>8 %</b> deiner Hände — ohne ICM wären es 28 %. Als <b>Chipleader</b> gegen denselben
+          Shove sind es <b>27 %</b>, weil dich der Verlust kaum trifft. Beide Ranges stehen
+          nebeneinander im Tab <i>Range</i>.</p>
+      </div></div>
+
+      <div class="step"><div class="n">2</div><div>
+        <h3>Mit jedem zusätzlichen Gegner stirbt zuerst der Bluff, dann der dünne Value</h3>
+        <p>Ein Bluff braucht, dass <b>alle</b> folden: aus 60 % Foldrate werden gegen zwei Gegner
+          nur noch 36 %. Und Value muss <b>alle</b> schlagen, nicht einen. Dieselbe Range bettet auf
+          K72 rainbow heads-up fast immer — im Dreiwege-Pot noch in etwa jedem fünften Fall.</p>
+        <p class="tip">Am Tisch reicht eine Frage: <b>„Wie viele sind noch drin?"</b> — und zwar
+          bevor du auf deine Karten schaust. Bei drei oder mehr Spielern gilt: Nuts betten, den Rest
+          checken.</p>
+      </div></div>
+
+      <div class="step"><div class="n">3</div><div>
+        <h3>Gegen ein Live-Feld kommt dein Geld aus Value, nicht aus Bluffs</h3>
+        <p>Recreationals callen zu viel und bluffen zu wenig. Die Anpassung ist unbequem, weil sie
+          langweilig aussieht: <b>dünner Value betten, größer betten, Bluffs streichen.</b> Wenn so
+          jemand selbst bettet oder raist, hat er es fast immer — dann ist Folden richtig, auch mit
+          Top Pair.</p>
+        <p class="tip">Im Trainer unter <i>Einstellungen → Gegnertyp</i> umschaltbar. Die Empfehlung
+          ändert sich dann wirklich, weil sich <b>seine Bet-Range</b> ändert — nicht, weil ein
+          Zuschlag addiert wird.</p>
+      </div></div>
+    </div>
+
+    <h2>Kleinkram, der trotzdem zählt</h2>
+    <ul>
+      <li><b>Antes:</b> Der Pot ist präflop größer → mehr Defense im BB, aber auch mehr Wert im
+        Stehlen. Der SPR sinkt, damit bleiben weniger Straßen für dein Geld.</li>
+      <li><b>Deine eigenen Fehler:</b> Der Knopf <b>⟳ Wiederholen</b> oben rechts erscheint, sobald
+        etwas fällig ist. Ein Spot, den du zweimal falsch gespielt hast, ist mehr wert als zwanzig
+        neue — die Wiederholung bringt ihn exakt so zurück, wie er war.</li>
+      <li><b>Ehrlichkeit über die Genauigkeit:</b> Die Empfehlungen sind eine Heuristik, kein Solver.
+        Sie sind für Frequenz und Sizing-Richtung gut kalibriert, aber sie sind nicht die Wahrheit.
+        Wenn dir etwas dauerhaft falsch vorkommt, liegt möglicherweise die App daneben.</li>
+    </ul>
+  </section>
+</main>
+
+<!-- ============================ STATS ============================ -->
+<main id="view-stats" class="view">
+  <section class="panel wide">
+    <h3>Session-Statistik</h3>
+    <div id="statsOut"></div>
+    <button class="ghost" id="btnResetStats">Statistik zurücksetzen</button>
+  </section>
+  <section class="panel wide">
+    <h3>Deine Fehler (zum Nacharbeiten)</h3>
+    <div id="mistakesOut"></div>
+  </section>
+</main>
+
+<!-- ============================ SETTINGS ============================ -->
+<div class="modal" id="settings" hidden>
+  <div class="modal-box">
+    <h3>Einstellungen</h3>
+    <div class="setgroup">
+      <div class="setlabel">Stackgrößen</div>
+      <label><input type="checkbox" class="cfgStack" value="push"> 12–20bb (Push/Fold-Zone)</label>
+      <label><input type="checkbox" class="cfgStack" value="short"> 20–35bb (Bubble)</label>
+      <label><input type="checkbox" class="cfgStack" value="mid" checked> 40–60bb</label>
+      <label><input type="checkbox" class="cfgStack" value="deep" checked> 60–100bb</label>
+    </div>
+    <div class="setgroup">
+      <div class="setlabel">Spot-Typen</div>
+      <label><input type="checkbox" class="cfgTag" value="SRP" checked> Single Raised Pots (Aggressor)</label>
+      <label><input type="checkbox" class="cfgTag" value="DEF" checked> Defense (Facing Bets)</label>
+      <label><input type="checkbox" class="cfgTag" value="3BP" checked> 3-Bet-Pots</label>
+      <label><input type="checkbox" class="cfgTag" value="MW" checked> Multiway (3-Wege-Pots, Flop-Drill)</label>
+      <label><input type="checkbox" class="cfgTag" value="BvB" checked> Blind vs Blind</label>
+    </div>
+    <div class="setgroup">
+      <div class="setlabel">Gegnertyp</div>
+      <select id="cfgProfile">
+        <option value="reg">Reg — solide, ausgeglichen (Baseline)</option>
+        <option value="station">Calling Station — callt zu viel, blufft nie</option>
+        <option value="nit">Nit — foldet zu viel</option>
+        <option value="lag">Aggro / Maniac — blufft zu viel</option>
+        <option value="mix">Gemischt — wechselt pro Hand</option>
+      </select>
+      <div class="muted modalhint">Der Typ wird dir immer angezeigt — du übst die Anpassung, nicht das Erraten.</div>
+    </div>
+    <div class="setgroup">
+      <div class="setlabel">Straßen</div>
+      <label><input type="checkbox" id="cfgMultiStreet" checked> Turn &amp; River weiterspielen (empfohlen)</label>
+      <label><input type="checkbox" id="cfgAutoHint"> Board-/Range-Info schon bei der Frage zeigen (Lernmodus)</label>
+    </div>
+    <div class="modalrow">
+      <button class="primary" id="btnCloseSettings">Übernehmen</button>
+      <button class="ghost" id="btnCancelSettings">Abbrechen</button>
+      <span class="muted modalhint">Esc oder Klick daneben schließt ohne Änderung</span>
+    </div>
+  </div>
+</div>
+
+<!-- ?v= erhöhen, wenn du die JS-Dateien änderst und der Browser alte Versionen cacht -->
+<script src="js/engine.js?v=34"></script>
+<script src="js/review.js?v=34"></script>
+<script src="js/ranges.js?v=34"></script>
+<script src="js/strategy.js?v=34"></script>
+<script src="js/handprofile.js?v=34"></script>
+<script src="js/plan.js?v=34"></script>
+<script src="js/tips.js?v=34"></script>
+<script src="js/mental.js?v=34"></script>
+<script src="js/eqtable.js?v=34"></script>
+<script src="js/icm.js?v=34"></script>
+<script src="js/w2d.js?v=34"></script>
+<script src="js/w2dstats.js?v=34"></script>
+<script src="js/w2daudit.js?v=34"></script>
+<script src="js/multiway.js?v=34"></script>
+<script src="js/w2dleaks.js?v=34"></script>
+<script src="js/w2dpost.js?v=34"></script>
+<script src="js/ownhands.js?v=34"></script>
+<script src="js/app.js?v=34"></script>
+
+<!-- Service Worker. Bewusst erst nach 'load': die Registrierung darf den
+     ersten Start nicht verzoegern. Faellt sie aus (file://, kein HTTPS,
+     privater Modus), laeuft die App normal weiter — nur eben online. -->
+<script>
+if ('serviceWorker' in navigator) {
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .catch(err => console.warn('Service Worker nicht registriert:', err));
+  });
+}
+</script>
+</body>
+</html>
