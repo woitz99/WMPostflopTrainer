@@ -1,5 +1,6 @@
 {
   "version": "0.0.1",
+  "autoPort": true,
   "configurations": [
     {
       "name": "trainer",
@@ -7,9 +8,9 @@
       "runtimeArgs": [
         "-m",
         "http.server",
-        "8137"
+        "8138"
       ],
-      "port": 8137
+      "port": 8138
     }
   ]
 }

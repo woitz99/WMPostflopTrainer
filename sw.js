@@ -16,11 +16,13 @@
       führender Slash würde die App auf dem iPhone still leer starten
       lassen — die Datei wäre da, nur unter einer anderen Adresse.
 
-   2. CACHE-BUSTER IN DER URL. index.html lädt die Skripte mit "?v=34".
+   2. CACHE-BUSTER IN DER URL. index.html lädt die Skripte mit "?v=NN".
       Der Cache speichert die Dateien OHNE Query und liest sie mit
       `ignoreSearch: true` wieder aus. Sonst müsste man jede Versionsnummer
       an zwei Stellen pflegen, und ein vergessener Ort heißt: die App holt
-      sich offline gar nichts mehr.
+      sich offline gar nichts mehr. Deshalb steht die Nummer hier bewusst
+      nirgends — sie darf sich in index.html ändern, ohne dass diese Datei
+      davon weiß.
 
    NEUE VERSION AUSSPIELEN: CACHE_VERSION unten hochzählen. Der alte Cache
    wird beim Aktivieren gelöscht, der neue beim nächsten Start gefüllt.
@@ -28,7 +30,7 @@
    alten Stand.
    ========================================================================= */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = 'pokertrainer-' + CACHE_VERSION;
 
 /* Die komplette App. Reihenfolge egal, Vollständigkeit nicht:
