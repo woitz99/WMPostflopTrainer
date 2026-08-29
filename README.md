@@ -27,6 +27,8 @@ node test/smoke.js
 
 ## Aufs Handy — offline nutzbar
 
+**Live: https://woitz99.github.io/WMPostflopTrainer/**
+
 Die App ist eine PWA: einmal geladen, laeuft sie vollstaendig ohne Netz.
 Genau dafuer gedacht, dass sie im Turniersaal in der Pause funktioniert.
 
