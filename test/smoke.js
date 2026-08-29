@@ -1140,7 +1140,13 @@ console.log('\n== Spaced Repetition (Leitner) ==');
     ok(sess.hands.length === 200, `200 Haende gelesen (${sess.hands.length})`);
     ok(sess.heroHands.length === 194, `194 davon mit dem Helden (${sess.heroHands.length})`);
     ok(sess.skipped === 6, 'die 6 Haende von einem fremden Tisch sind markiert, nicht still verworfen');
-    ok(sess.meta.nickname === 'AceOfGraz' && sess.meta.place === 10, 'Kopfdaten gelesen');
+    // Nickname bewusst nicht hart verglichen: er stuende sonst im
+    // oeffentlichen Repo, obwohl die Beispieldatei selbst nicht mitgeht.
+    // Die staerkere Invariante ist ohnehin, dass Kopfdaten und Handdaten
+    // denselben Helden meinen.
+    ok(!!sess.meta.nickname && sess.meta.place === 10, 'Kopfdaten gelesen');
+    ok(sess.heroHands.every(h => h.hero === sess.meta.nickname),
+      'Held aus dem Dateikopf und Held in den Haenden sind derselbe');
 
     // Der Knockout haengt als Kind-Element im <player>-Tag, das dann NICHT
     // selbstschliessend ist. Frueher hat der Parser genau diese Haende
