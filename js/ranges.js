@@ -81,7 +81,7 @@
       heroPos: 'CO', villPos: 'BTN + BB', heroIP: false, role: 'PFR', potType: 'SRP',
       heroRange: b => adjustForStack(RFI.CO, b),
       villRanges: b => [IP_FLAT.BTN_vs_CO, adjustForStack(BB_FLAT.CO, b)],
-      villNames: ['BTN (hinter dir)', 'BB (vor dir)'],
+      villNames: ['BTN (hinter dir)', 'BB (vor dir)'], villPosKeys: ['BTN', 'BB'],
       story: 'Du hast die Initiative, aber **zwei** Gegner und keine Position auf einen davon. Die C-Bet-Frequenz fällt hier drastisch.'
     },
     {
@@ -90,7 +90,7 @@
       heroPos: 'BB', villPos: 'MP + BTN', heroIP: false, role: 'CALLER', potType: 'SRP',
       heroRange: b => adjustForStack(BB_FLAT.MP, b),
       villRanges: b => [adjustForStack(RFI.MP, b), IP_FLAT.BTN_vs_MP],
-      villNames: ['MP (Aggressor)', 'BTN (hinter dir)'],
+      villNames: ['MP (Aggressor)', 'BTN (hinter dir)'], villPosKeys: ['MP', 'BTN'],
       story: 'Der schlechteste Platz am Tisch: **OOP gegen zwei**, dazwischen eingeklemmt. Ohne starke Hand gehört hier fast alles in den Müll.'
     },
     {
@@ -99,7 +99,7 @@
       heroPos: 'BTN', villPos: 'MP + BB', heroIP: true, role: 'CALLER', potType: 'SRP',
       heroRange: () => IP_FLAT.BTN_vs_MP,
       villRanges: b => [adjustForStack(RFI.MP, b), adjustForStack(BB_FLAT.MP, b)],
-      villNames: ['MP (Aggressor)', 'BB (vor dir)'],
+      villNames: ['MP (Aggressor)', 'BB (vor dir)'], villPosKeys: ['MP', 'BB'],
       story: 'Position gegen zwei ist Gold wert — aber nur, wenn du sie für **Information** nutzt statt für Bluffs. Bluffs brauchen hier zwei Folds.'
     },
     {
@@ -108,12 +108,38 @@
       heroPos: 'BB', villPos: '2 Limper', heroIP: false, role: 'CALLER', potType: 'SRP',
       heroRange: () => '22+, A2s+, K2s+, Q4s+, J6s+, T6s+, 95s+, 84s+, 74s+, 63s+, 53s+, 43s, A2o+, K5o+, Q7o+, J7o+, T7o+, 96o+, 86o+, 75o+, 65o',
       villRanges: () => [LIMP, LIMP],
-      villNames: ['Limper 1', 'Limper 2'],
+      villNames: ['Limper 1', 'Limper 2'], villPosKeys: ['MP', 'CO'],
       story: 'Limped Pot am Live-Tisch: kleiner Pot, schwache Ranges, aber **zwei** davon. Kleine Pötte gewinnt man mit Value, nicht mit Bluffs.'
     }
   ];
   /* Typische Live-Limp-Range: viele Broadways, alle Pockets, viel Suited-Trash. */
   const LIMP = '22-JJ, A2s+, K3s+, Q5s+, J6s+, T6s+, 95s+, 85s+, 74s+, 64s+, 53s+, A2o-AJo, K7o+, Q8o+, J8o+, T8o+, 97o+, 87o, 76o';
+
+  /* ------------------------------------------------------------------ *
+   * Postflop-Aktionsreihenfolge.
+   *
+   * Heads-up genuegt ein Boolean: wer in Position ist, handelt zuletzt.
+   * Im Mehrweg stimmt das nicht mehr — als CO hast du den BTN hinter dir
+   * UND den BB vor dir. Genau daran stand im Drill "Du bist zuerst dran",
+   * obwohl der BB vor dir handelt.
+   *
+   * Deshalb wird die Reihenfolge hier aus den Positionen HERGELEITET und
+   * nicht je Spot von Hand gesetzt — sonst koennen Anzeige und Daten
+   * auseinanderlaufen, ohne dass es auffaellt.
+   * ------------------------------------------------------------------ */
+  const POSTFLOP_ORDER = ['SB', 'BB', 'UTG', 'UTG1', 'UTG2', 'MP', 'MP1', 'MP2', 'CO', 'BTN'];
+
+  /** Handelt `pos` postflop vor `heroPos`? */
+  function actsBefore(pos, heroPos) {
+    const a = POSTFLOP_ORDER.indexOf(pos), b = POSTFLOP_ORDER.indexOf(heroPos);
+    return a >= 0 && b >= 0 && a < b;
+  }
+
+  /* Je Mehrweg-Spot: welche Gegner sind vor dir dran? Index passt zu
+     villRanges/villNames. */
+  MULTIWAY.forEach(s => {
+    s.villActsBefore = (s.villPosKeys || []).map(pk => actsBefore(pk, s.heroPos));
+  });
 
   /* JEDER Spot muss villRange() anbieten. Andere Module — Hand-Steckbriefe,
      Analyse-Presets — iterieren über SPOTS und rufen es auf; ein Spot mit
@@ -243,6 +269,6 @@
 
   Object.assign(P, {
     RFI, BB_FLAT, IP_FLAT, THREEBET, CALL_3BET, STACKS, SPOTS,
-    geometry, weightedPick, adjustForStack
+    geometry, weightedPick, adjustForStack, POSTFLOP_ORDER, actsBefore
   });
 })();

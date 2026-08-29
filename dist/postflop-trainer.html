@@ -2253,7 +2253,7 @@ Object.assign(window.PT, {
       heroPos: 'CO', villPos: 'BTN + BB', heroIP: false, role: 'PFR', potType: 'SRP',
       heroRange: b => adjustForStack(RFI.CO, b),
       villRanges: b => [IP_FLAT.BTN_vs_CO, adjustForStack(BB_FLAT.CO, b)],
-      villNames: ['BTN (hinter dir)', 'BB (vor dir)'],
+      villNames: ['BTN (hinter dir)', 'BB (vor dir)'], villPosKeys: ['BTN', 'BB'],
       story: 'Du hast die Initiative, aber **zwei** Gegner und keine Position auf einen davon. Die C-Bet-Frequenz fällt hier drastisch.'
     },
     {
@@ -2262,7 +2262,7 @@ Object.assign(window.PT, {
       heroPos: 'BB', villPos: 'MP + BTN', heroIP: false, role: 'CALLER', potType: 'SRP',
       heroRange: b => adjustForStack(BB_FLAT.MP, b),
       villRanges: b => [adjustForStack(RFI.MP, b), IP_FLAT.BTN_vs_MP],
-      villNames: ['MP (Aggressor)', 'BTN (hinter dir)'],
+      villNames: ['MP (Aggressor)', 'BTN (hinter dir)'], villPosKeys: ['MP', 'BTN'],
       story: 'Der schlechteste Platz am Tisch: **OOP gegen zwei**, dazwischen eingeklemmt. Ohne starke Hand gehört hier fast alles in den Müll.'
     },
     {
@@ -2271,7 +2271,7 @@ Object.assign(window.PT, {
       heroPos: 'BTN', villPos: 'MP + BB', heroIP: true, role: 'CALLER', potType: 'SRP',
       heroRange: () => IP_FLAT.BTN_vs_MP,
       villRanges: b => [adjustForStack(RFI.MP, b), adjustForStack(BB_FLAT.MP, b)],
-      villNames: ['MP (Aggressor)', 'BB (vor dir)'],
+      villNames: ['MP (Aggressor)', 'BB (vor dir)'], villPosKeys: ['MP', 'BB'],
       story: 'Position gegen zwei ist Gold wert — aber nur, wenn du sie für **Information** nutzt statt für Bluffs. Bluffs brauchen hier zwei Folds.'
     },
     {
@@ -2280,12 +2280,38 @@ Object.assign(window.PT, {
       heroPos: 'BB', villPos: '2 Limper', heroIP: false, role: 'CALLER', potType: 'SRP',
       heroRange: () => '22+, A2s+, K2s+, Q4s+, J6s+, T6s+, 95s+, 84s+, 74s+, 63s+, 53s+, 43s, A2o+, K5o+, Q7o+, J7o+, T7o+, 96o+, 86o+, 75o+, 65o',
       villRanges: () => [LIMP, LIMP],
-      villNames: ['Limper 1', 'Limper 2'],
+      villNames: ['Limper 1', 'Limper 2'], villPosKeys: ['MP', 'CO'],
       story: 'Limped Pot am Live-Tisch: kleiner Pot, schwache Ranges, aber **zwei** davon. Kleine Pötte gewinnt man mit Value, nicht mit Bluffs.'
     }
   ];
   /* Typische Live-Limp-Range: viele Broadways, alle Pockets, viel Suited-Trash. */
   const LIMP = '22-JJ, A2s+, K3s+, Q5s+, J6s+, T6s+, 95s+, 85s+, 74s+, 64s+, 53s+, A2o-AJo, K7o+, Q8o+, J8o+, T8o+, 97o+, 87o, 76o';
+
+  /* ------------------------------------------------------------------ *
+   * Postflop-Aktionsreihenfolge.
+   *
+   * Heads-up genuegt ein Boolean: wer in Position ist, handelt zuletzt.
+   * Im Mehrweg stimmt das nicht mehr — als CO hast du den BTN hinter dir
+   * UND den BB vor dir. Genau daran stand im Drill "Du bist zuerst dran",
+   * obwohl der BB vor dir handelt.
+   *
+   * Deshalb wird die Reihenfolge hier aus den Positionen HERGELEITET und
+   * nicht je Spot von Hand gesetzt — sonst koennen Anzeige und Daten
+   * auseinanderlaufen, ohne dass es auffaellt.
+   * ------------------------------------------------------------------ */
+  const POSTFLOP_ORDER = ['SB', 'BB', 'UTG', 'UTG1', 'UTG2', 'MP', 'MP1', 'MP2', 'CO', 'BTN'];
+
+  /** Handelt `pos` postflop vor `heroPos`? */
+  function actsBefore(pos, heroPos) {
+    const a = POSTFLOP_ORDER.indexOf(pos), b = POSTFLOP_ORDER.indexOf(heroPos);
+    return a >= 0 && b >= 0 && a < b;
+  }
+
+  /* Je Mehrweg-Spot: welche Gegner sind vor dir dran? Index passt zu
+     villRanges/villNames. */
+  MULTIWAY.forEach(s => {
+    s.villActsBefore = (s.villPosKeys || []).map(pk => actsBefore(pk, s.heroPos));
+  });
 
   /* JEDER Spot muss villRange() anbieten. Andere Module — Hand-Steckbriefe,
      Analyse-Presets — iterieren über SPOTS und rufen es auf; ein Spot mit
@@ -2415,7 +2441,7 @@ Object.assign(window.PT, {
 
   Object.assign(P, {
     RFI, BB_FLAT, IP_FLAT, THREEBET, CALL_3BET, STACKS, SPOTS,
-    geometry, weightedPick, adjustForStack
+    geometry, weightedPick, adjustForStack, POSTFLOP_ORDER, actsBefore
   });
 })();
 
@@ -6953,7 +6979,11 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
        eine echte Mehrspieler-Aktionslogik — das ist hier nicht drin, und
        so getan als ob wird nicht. */
     if (S.villRanges) {
-      if (S.spot.heroIP) { S.villChecked = true; pushLog('vil', 'Beide checken zu dir'); }
+      const vorDir = (S.spot.villActsBefore || []).filter(Boolean).length;
+      if (vorDir) {
+        S.villChecked = true;
+        pushLog('vil', vorDir > 1 ? 'Alle vor dir checken' : 'Der Spieler vor dir checkt');
+      }
       return askBetting();
     }
     if (S.spot.heroIP) {
@@ -7028,16 +7058,37 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
     S.q.optKeys = opts.map(o => o.key);
     S.q.optLabels = {}; opts.forEach(o => S.q.optLabels[o.key] = o.label);
     /* Der Fragetext wird HERGELEITET, nicht aus gespeichertem Zustand gelesen.
-       Im BET-Modus impliziert Position bereits, dass der Gegner gecheckt hat —
-       sonst stuende hier eine Bet und wir waeren im FACE-Modus. Vorher hing der
-       Text zusaetzlich an S.villChecked; bei wiederholten Spots aus aelteren
-       Schnappschuessen fehlt dieses Flag, und dann stand "Du bist zuerst dran",
-       obwohl du in Position warst. */
-    const erIstDran = S.spot.heroIP;
-    renderAsk(erIstDran
-      ? (S.villRanges ? 'Beide checken zu dir — deine Aktion?'
-        : 'Gegner checkt zu dir — deine Aktion?')
-      : 'Du bist zuerst dran — deine Aktion?', opts);
+       Im BET-Modus impliziert die Reihenfolge bereits, dass alle vor dir
+       gecheckt haben — sonst stuende hier eine Bet und wir waeren im
+       FACE-Modus. Vorher hing der Text an S.villChecked; bei wiederholten
+       Spots aus aelteren Schnappschuessen fehlt dieses Flag. */
+    renderAsk(askTitleFor(S.spot), opts);
+  }
+
+  /**
+   * Wer ist vor dir dran? Heads-up beantwortet das `heroIP` allein, im
+   * Mehrweg nicht: als CO hast du den BTN hinter dir und den BB vor dir.
+   * Genau da stand vorher "Du bist zuerst dran", obwohl der BB zuerst
+   * handelt. Die Reihenfolge kommt deshalb aus `villActsBefore`, das in
+   * ranges.js aus den Positionen hergeleitet wird.
+   */
+  function askTitleFor(spot) {
+    const before = spot.villActsBefore;
+    if (!before || !before.length) {
+      // Heads-up: in Position heisst, er hat schon gecheckt.
+      return spot.heroIP ? 'Gegner checkt zu dir — deine Aktion?'
+        : 'Du bist zuerst dran — deine Aktion?';
+    }
+    const shortName = i => String((spot.villNames || [])[i] || 'Gegner').replace(/\s*\(.*$/, '');
+    const vor = before.map((b, i) => b ? i : -1).filter(i => i >= 0);
+    const hinter = before.map((b, i) => b ? -1 : i).filter(i => i >= 0);
+    if (!vor.length) return 'Du bist zuerst dran — deine Aktion?';
+    if (!hinter.length) {
+      return (vor.length > 1 ? 'Alle checken zu dir' : shortName(vor[0]) + ' checkt zu dir')
+        + ' — deine Aktion?';
+    }
+    return vor.map(shortName).join(' und ') + ' checkt zu dir, '
+      + hinter.map(shortName).join(' und ') + ' sitzt hinter dir — deine Aktion?';
   }
 
   function askFacing(toCall, potNow, betPct, label) {

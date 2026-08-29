@@ -1534,5 +1534,42 @@ console.log('\n== PWA / Offline ==');
   }
 }
 
+
+console.log('\n== Postflop-Aktionsreihenfolge ==');
+{
+  // Der Fehler, der das ausgeloest hat: der Drill leitete die Reihenfolge aus
+  // dem einen Boolean heroIP ab. Heads-up genuegt das, im Mehrweg nicht — als
+  // CO hat man den BTN hinter sich UND den BB vor sich. Im Drill stand
+  // deshalb "Du bist zuerst dran", obwohl der BB zuerst handelt.
+  ok(P.actsBefore('BB', 'CO'), 'BB handelt postflop vor dem CO');
+  ok(P.actsBefore('SB', 'BB'), 'SB vor BB');
+  ok(!P.actsBefore('BTN', 'CO'), 'BTN handelt nach dem CO');
+  ok(!P.actsBefore('CO', 'CO'), 'niemand handelt vor sich selbst');
+  ok(P.POSTFLOP_ORDER[0] === 'SB' && P.POSTFLOP_ORDER[P.POSTFLOP_ORDER.length - 1] === 'BTN',
+    'Reihenfolge laeuft von SB bis BTN');
+
+  const mw = P.SPOTS.filter(s => s.tag === 'MW');
+  ok(mw.length > 0, `${mw.length} Mehrweg-Spots`);
+  for (const sp of mw) {
+    ok(Array.isArray(sp.villPosKeys) && sp.villPosKeys.length === sp.villRanges('mid').length,
+      `${sp.id}: je Gegner eine Position hinterlegt`);
+    ok(sp.villActsBefore.length === sp.villPosKeys.length,
+      `${sp.id}: Reihenfolge fuer jeden Gegner bestimmt`);
+    // Hergeleitet, nicht gesetzt: muss zur Positionsliste passen.
+    sp.villPosKeys.forEach((pk, i) => {
+      ok(sp.villActsBefore[i] === P.actsBefore(pk, sp.heroPos),
+        `${sp.id}: ${pk} vs ${sp.heroPos} korrekt eingeordnet`);
+    });
+    // Und der Anzeigetext darf dem nicht widersprechen.
+    sp.villNames.forEach((nm, i) => {
+      if (/vor dir/.test(nm)) ok(sp.villActsBefore[i] === true, `${sp.id}: "${nm}" ist auch wirklich vor dir`);
+      if (/hinter dir/.test(nm)) ok(sp.villActsBefore[i] === false, `${sp.id}: "${nm}" ist auch wirklich hinter dir`);
+    });
+  }
+  const co = mw.find(s => s.id === 'mw_co_btn_bb');
+  ok(co && co.villActsBefore[1] === true && co.villActsBefore[0] === false,
+    'CO vs BTN+BB: BB vor dir, BTN hinter dir — der Fall, der falsch war');
+}
+
 console.log('\n' + (fails ? `### ${fails} FEHLER ###` : '### Alle Tests bestanden ###'));
 process.exit(fails ? 1 : 0);

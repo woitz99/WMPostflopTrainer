@@ -291,7 +291,11 @@
        eine echte Mehrspieler-Aktionslogik — das ist hier nicht drin, und
        so getan als ob wird nicht. */
     if (S.villRanges) {
-      if (S.spot.heroIP) { S.villChecked = true; pushLog('vil', 'Beide checken zu dir'); }
+      const vorDir = (S.spot.villActsBefore || []).filter(Boolean).length;
+      if (vorDir) {
+        S.villChecked = true;
+        pushLog('vil', vorDir > 1 ? 'Alle vor dir checken' : 'Der Spieler vor dir checkt');
+      }
       return askBetting();
     }
     if (S.spot.heroIP) {
@@ -366,16 +370,37 @@
     S.q.optKeys = opts.map(o => o.key);
     S.q.optLabels = {}; opts.forEach(o => S.q.optLabels[o.key] = o.label);
     /* Der Fragetext wird HERGELEITET, nicht aus gespeichertem Zustand gelesen.
-       Im BET-Modus impliziert Position bereits, dass der Gegner gecheckt hat —
-       sonst stuende hier eine Bet und wir waeren im FACE-Modus. Vorher hing der
-       Text zusaetzlich an S.villChecked; bei wiederholten Spots aus aelteren
-       Schnappschuessen fehlt dieses Flag, und dann stand "Du bist zuerst dran",
-       obwohl du in Position warst. */
-    const erIstDran = S.spot.heroIP;
-    renderAsk(erIstDran
-      ? (S.villRanges ? 'Beide checken zu dir — deine Aktion?'
-        : 'Gegner checkt zu dir — deine Aktion?')
-      : 'Du bist zuerst dran — deine Aktion?', opts);
+       Im BET-Modus impliziert die Reihenfolge bereits, dass alle vor dir
+       gecheckt haben — sonst stuende hier eine Bet und wir waeren im
+       FACE-Modus. Vorher hing der Text an S.villChecked; bei wiederholten
+       Spots aus aelteren Schnappschuessen fehlt dieses Flag. */
+    renderAsk(askTitleFor(S.spot), opts);
+  }
+
+  /**
+   * Wer ist vor dir dran? Heads-up beantwortet das `heroIP` allein, im
+   * Mehrweg nicht: als CO hast du den BTN hinter dir und den BB vor dir.
+   * Genau da stand vorher "Du bist zuerst dran", obwohl der BB zuerst
+   * handelt. Die Reihenfolge kommt deshalb aus `villActsBefore`, das in
+   * ranges.js aus den Positionen hergeleitet wird.
+   */
+  function askTitleFor(spot) {
+    const before = spot.villActsBefore;
+    if (!before || !before.length) {
+      // Heads-up: in Position heisst, er hat schon gecheckt.
+      return spot.heroIP ? 'Gegner checkt zu dir — deine Aktion?'
+        : 'Du bist zuerst dran — deine Aktion?';
+    }
+    const shortName = i => String((spot.villNames || [])[i] || 'Gegner').replace(/\s*\(.*$/, '');
+    const vor = before.map((b, i) => b ? i : -1).filter(i => i >= 0);
+    const hinter = before.map((b, i) => b ? -1 : i).filter(i => i >= 0);
+    if (!vor.length) return 'Du bist zuerst dran — deine Aktion?';
+    if (!hinter.length) {
+      return (vor.length > 1 ? 'Alle checken zu dir' : shortName(vor[0]) + ' checkt zu dir')
+        + ' — deine Aktion?';
+    }
+    return vor.map(shortName).join(' und ') + ' checkt zu dir, '
+      + hinter.map(shortName).join(' und ') + ' sitzt hinter dir — deine Aktion?';
   }
 
   function askFacing(toCall, potNow, betPct, label) {
