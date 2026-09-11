@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 
-<link rel="stylesheet" href="css/style.css?v=43">
+<link rel="stylesheet" href="css/style.css?v=45">
 </head>
 <body>
 
@@ -208,6 +208,20 @@
 
 <!-- ============================ RECHNEN ============================= -->
 <main id="view-rechnen" class="view">
+  <section class="panel wide">
+    <h3>River-Filter — ein Paar, zweimal gecallt</h3>
+    <p class="muted hpintro">Der teuerste Spot deiner Sessions: du hast gebettet, er hat zweimal
+      gecallt, und jetzt checkt er zum dritten Mal. Gefragt ist nicht, ob deine Hand gut aussieht,
+      sondern <b>wer eine Bet bezahlt</b>. Gerechnet wird explizit — EV(Check) gegen EV(Bet), gegen
+      seine verbliebene Range. Der Check-Raise ist in EV(Bet) bewusst <b>nicht</b> eingerechnet:
+      die Bet steht damit eher zu gut da, und wenn der Check trotzdem vorne liegt, liegt er sicher vorne.</p>
+    <div class="planactions">
+      <button class="primary" id="rfNew">Neue Hand ▸</button>
+      <span class="muted" id="rfScore"></span>
+    </div>
+    <div id="rfOut"></div>
+  </section>
+
   <section class="panel wide">
     <h3>Kopfrechnen — Pot Odds, MDF, Sizings</h3>
     <p class="muted hpintro">Online rechnet das Tool mit. Live hast du 30 Sekunden, kein HUD und
@@ -729,24 +743,25 @@
 </div>
 
 <!-- ?v= erhöhen, wenn du die JS-Dateien änderst und der Browser alte Versionen cacht -->
-<script src="js/engine.js?v=43"></script>
-<script src="js/review.js?v=43"></script>
-<script src="js/ranges.js?v=43"></script>
-<script src="js/strategy.js?v=43"></script>
-<script src="js/handprofile.js?v=43"></script>
-<script src="js/plan.js?v=43"></script>
-<script src="js/tips.js?v=43"></script>
-<script src="js/mental.js?v=43"></script>
-<script src="js/eqtable.js?v=43"></script>
-<script src="js/icm.js?v=43"></script>
-<script src="js/w2d.js?v=43"></script>
-<script src="js/w2dstats.js?v=43"></script>
-<script src="js/w2daudit.js?v=43"></script>
-<script src="js/multiway.js?v=43"></script>
-<script src="js/w2dleaks.js?v=43"></script>
-<script src="js/w2dpost.js?v=43"></script>
-<script src="js/ownhands.js?v=43"></script>
-<script src="js/app.js?v=43"></script>
+<script src="js/engine.js?v=45"></script>
+<script src="js/review.js?v=45"></script>
+<script src="js/ranges.js?v=45"></script>
+<script src="js/strategy.js?v=45"></script>
+<script src="js/handprofile.js?v=45"></script>
+<script src="js/plan.js?v=45"></script>
+<script src="js/tips.js?v=45"></script>
+<script src="js/mental.js?v=45"></script>
+<script src="js/eqtable.js?v=45"></script>
+<script src="js/icm.js?v=45"></script>
+<script src="js/w2d.js?v=45"></script>
+<script src="js/w2dstats.js?v=45"></script>
+<script src="js/w2daudit.js?v=45"></script>
+<script src="js/multiway.js?v=45"></script>
+<script src="js/w2dleaks.js?v=45"></script>
+<script src="js/w2dpost.js?v=45"></script>
+<script src="js/ownhands.js?v=45"></script>
+<script src="js/riverdrill.js?v=45"></script>
+<script src="js/app.js?v=45"></script>
 
 <!-- Service Worker. Bewusst erst nach 'load': die Registrierung darf den
      ersten Start nicht verzoegern. Faellt sie aus (file://, kein HTTPS,

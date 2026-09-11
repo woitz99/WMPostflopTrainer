@@ -2,7 +2,7 @@
 global.window = {};
 const fs = require('fs'), path = require('path');
 const base = path.join(__dirname, '..', 'js');
-for (const f of ['engine.js', 'review.js', 'ranges.js', 'strategy.js', 'handprofile.js', 'plan.js', 'tips.js', 'mental.js', 'eqtable.js', 'icm.js', 'multiway.js', 'w2d.js', 'w2dstats.js', 'w2daudit.js', 'w2dleaks.js', 'w2dpost.js', 'ownhands.js']) {
+for (const f of ['engine.js', 'review.js', 'ranges.js', 'strategy.js', 'handprofile.js', 'plan.js', 'tips.js', 'mental.js', 'eqtable.js', 'icm.js', 'multiway.js', 'w2d.js', 'w2dstats.js', 'w2daudit.js', 'w2dleaks.js', 'w2dpost.js', 'ownhands.js', 'riverdrill.js']) {
   eval(fs.readFileSync(path.join(base, f), 'utf8'));
 }
 const P = global.window.PT;
@@ -1576,6 +1576,51 @@ console.log('\n== Postflop-Aktionsreihenfolge ==');
   const co = mw.find(s => s.id === 'mw_co_btn_bb');
   ok(co && co.villActsBefore[1] === true && co.villActsBefore[0] === false,
     'CO vs BTN+BB: BB vor dir, BTN hinter dir — der Fall, der falsch war');
+}
+
+console.log('\n== River-Filter (Drill) ==');
+{
+  const RD = P.RiverDrill;
+  const EIN_PAAR = [P.MADE.OVERPAIR, P.MADE.TPTK, P.MADE.TP, P.MADE.PP_MID, P.MADE.SECOND];
+  P.seedRng(4242);
+  let gebaut = 0, einPaar = 0, sortiert = 0, checkStimmt = 0;
+  for (let i = 0; i < 25; i++) {
+    const q = RD.make('deep');
+    if (!q) continue;
+    gebaut++;
+    if (EIN_PAAR.includes(q.cls.made)) einPaar++;
+    const ev = RD.evs(q);
+    let abfallend = true;
+    for (let k = 1; k < ev.list.length; k++) if (ev.list[k].ev > ev.list[k - 1].ev + 1e-9) abfallend = false;
+    if (abfallend && ev.best === ev.list[0]) sortiert++;
+    const check = ev.list.find(o => o.key === 'CHECK');
+    const soll = ev.split.anteilVorne * q.pot + ev.split.anteilGleich * q.pot / 2;
+    if (Math.abs(check.ev - soll) < 1e-9) checkStimmt++;
+  }
+  ok(gebaut >= 20, `Szenarien werden gebaut (${gebaut} von 25 Versuchen)`);
+  ok(einPaar === gebaut, 'jedes Szenario ist eine Ein-Paar-Hand');
+  ok(sortiert === gebaut, 'Optionen nach EV sortiert, best ist das Maximum');
+  ok(checkStimmt === gebaut, 'EV(Check) ist der Showdown-Anteil am Pot');
+
+  P.seedRng(99);
+  let q2 = null;
+  for (let i = 0; i < 20 && !q2; i++) q2 = RD.make('deep');
+  const bet = RD.evs(q2).list.find(o => o.bet > 0).bet;
+  const klein = RD.raiseSpot(q2, bet, 2), gross = RD.raiseSpot(q2, bet, 4);
+  ok(Math.abs(klein.breakeven - klein.toCall / (klein.potNow + klein.toCall)) < 1e-9,
+    'Breakeven = Call / (Pot + Call)');
+  ok(gross.breakeven > klein.breakeven,
+    `groessere Erhoehung verlangt mehr Bluffs (${(klein.breakeven * 100).toFixed(0)}% -> ${(gross.breakeven * 100).toFixed(0)}%)`);
+  ok(klein.nValue + klein.nBluff > 0, 'seine Raise-Range ist nicht leer');
+  const evSoll = klein.bluffAnteil * klein.potNow - (1 - klein.bluffAnteil) * klein.toCall;
+  ok(Math.abs(klein.evCall - evSoll) < 1e-9, 'EV(Call) passt zum Bluff-Anteil');
+
+  /* Der Bug, um den es ging: der Zufallsindex darf NICHT im find-Rueckruf
+     gezogen werden — sonst liefert make() sporadisch null. */
+  P.seedRng(20260911);
+  let leer = 0;
+  for (let i = 0; i < 40; i++) if (!RD.make('deep')) leer++;
+  ok(leer === 0, `make() faellt nicht sporadisch auf null (${leer} Ausfaelle)`);
 }
 
 console.log('\n' + (fails ? `### ${fails} FEHLER ###` : '### Alle Tests bestanden ###'));

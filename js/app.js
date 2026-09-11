@@ -24,6 +24,7 @@
     hp: { sel: 'AKo', rangeKey: 'bb_vs_btn_def', cache: {}, evCache: {}, busy: false },
     rd: { cache: {} },
     sc: { cache: {}, q: null, busy: false },
+    rf: { q: null, ev: null, picked: null, raise: null },
     mt: load('pt_mental', { right: 0, total: 0, streak: 0, best: 0 }),
     own: { id: null, step: 0, picks: [] }
   };
@@ -1669,6 +1670,179 @@
     scRenderScore();
   }
 
+  /* ============================ RIVER-FILTER ======================== *
+   * Ein Paar, zweimal gecallt, er checkt zum dritten Mal. Die Rechnung
+   * steht in js/riverdrill.js; hier nur Frage, Antwort und Darstellung.
+   * Bewertet wird gegen EV, nicht gegen die Heuristik — warum, steht im
+   * Kopf der Moduldatei.
+   * ------------------------------------------------------------------ */
+  const RF_TOLERANZ = 0.3;      // bb, innerhalb derer zwei Optionen gleich gut sind
+
+  function rfBand() {
+    /* Der Leak sitzt im tiefen Spiel — bei 25bb gibt es am River nichts
+       mehr zu entscheiden. Deshalb nur die beiden großen Bänder, und die
+       aus der Einstellung, falls dort eines angehakt ist. */
+    const erlaubt = (S.cfg.stacks || []).filter(b => b === 'mid' || b === 'deep');
+    const pool = erlaubt.length ? erlaubt : ['deep'];
+    return pool[(P.rng() * pool.length) | 0];
+  }
+
+  function rfNew() {
+    let q = null;
+    for (let i = 0; i < 8 && !q; i++) q = P.RiverDrill.make(rfBand());
+    if (!q) { $('#rfOut').innerHTML = '<div class="hpnote-sm">Kein passendes Szenario gefunden — nochmal klicken.</div>'; return; }
+    S.rf = { q, ev: P.RiverDrill.evs(q), picked: null, raise: null };
+    rfRenderQuestion();
+  }
+
+  function rfRenderQuestion() {
+    const q = S.rf.q, st = P.STACKS[q.band];
+    $('#rfOut').innerHTML =
+      '<div class="rfask"><b>' + q.spot.heroPos + ' gegen ' + q.spot.villPos + '</b>, Stacks ' + st.bb +
+        'bb — du bist der Aggressor und in Position.<br>Board ' + miniCards(q.board) +
+        ' · deine Hand ' + miniCards(q.hero) + ' <b>' + q.cls.made + '</b><br>Pot <b>' +
+        q.pot.toFixed(1) + 'bb</b>, hinter dir liegen noch <b>' + q.eff.toFixed(1) + 'bb</b>.</div>' +
+      '<div class="rflog">' + q.log.map(l => '<div>' + escapeHtml(l) + '</div>').join('') + '</div>' +
+      '<div class="opts" id="rfOpts"></div>';
+    const wrap = $('#rfOpts');
+    /* In fester Reihenfolge, NICHT nach EV: sortiert stünde die Antwort
+       schon in der Reihenfolge der Knöpfe. */
+    const reihenfolge = P.RiverDrill.BET_OPTIONS.map(o => o.key);
+    const knoepfe = S.rf.ev.list.slice().sort((a, b) => reihenfolge.indexOf(a.key) - reihenfolge.indexOf(b.key));
+    for (const o of knoepfe) {
+      const b = document.createElement('button');
+      b.className = 'opt';
+      b.innerHTML = o.bet ? o.label + '<span class="amt">' + o.bet.toFixed(1) + 'bb</span>' : o.label;
+      b.onclick = () => rfAnswer(o.key);
+      wrap.appendChild(b);
+    }
+    rfScore();
+  }
+
+  function rfScore() {
+    const st = S.stats.river;
+    $('#rfScore').textContent = st && st.total ? st.right + ' von ' + st.total + ' richtig' : '';
+  }
+
+  /** Die EV-Tabelle — gleiche Darstellung nach Frage 1 und nach Frage 2. */
+  function rfEvTable() {
+    const ev = S.rf.ev, picked = S.rf.picked;
+    return '<table class="rfev"><tr><th>Aktion</th><th>Einsatz</th><th>EV</th><th>wer dich bezahlt</th></tr>' +
+      ev.list.map(o =>
+        '<tr class="' + (o.key === ev.best.key ? 'best' : '') + (o.key === picked ? ' picked' : '') + '">' +
+        '<td>' + o.label + (o.key === picked ? ' <small>(du)</small>' : '') + '</td>' +
+        '<td class="num">' + (o.bet ? o.bet.toFixed(1) + 'bb' : '—') + '</td>' +
+        '<td class="num">' + o.ev.toFixed(2) + 'bb</td>' +
+        '<td class="num">' + (o.bet ? (o.anteilBesserUnterZahlern * 100).toFixed(0) + '% schlagen dich' : 'Showdown') + '</td></tr>'
+      ).join('') + '</table>';
+  }
+
+  function rfSplitPanel() {
+    const sp = S.rf.ev.split, q = S.rf.q;
+    const top = sp.schlaegtDich.slice(0, 6).map(x => x[0] + '×' + x[1]).join(', ');
+    return '<div class="rfsplit">' +
+      '<div><b>' + (sp.anteilHinten * 100).toFixed(0) + '%</b><span>seiner verbliebenen Range schlägt dich (' + sp.komboHinten + ' Kombos)</span></div>' +
+      '<div><b>' + (sp.anteilVorne * 100).toFixed(0) + '%</b><span>schlägst du — genau das gewinnt der Check am Showdown</span></div>' +
+      '<div><b>' + q.villRange.length + '</b><span>Kombos hat er nach zwei Calls noch</span></div></div>' +
+      (top ? '<div class="hpnote-sm">Was dich schlägt: ' + escapeHtml(top) + '.</div>' : '');
+  }
+
+  function rfZeigeHand() {
+    const q = S.rf.q;
+    return miniCards(q.vill) + ' <b>' + P.classify(q.vill, q.board).made + '</b>';
+  }
+  function rfHeroVorne() {
+    const q = S.rf.q;
+    return P.evaluate(q.hero.concat(q.board)) > P.evaluate(q.vill.concat(q.board));
+  }
+
+  function rfAnswer(key) {
+    const q = S.rf.q, ev = S.rf.ev;
+    S.rf.picked = key;
+    const gewaehlt = ev.list.find(o => o.key === key);
+    const right = (ev.best.ev - gewaehlt.ev) <= RF_TOLERANZ;
+    const knapp = right && key !== ev.best.key;
+    const st = S.stats.river || (S.stats.river = { right: 0, total: 0 });
+    st.total++; if (right) st.right++;
+    save();
+
+    let out =
+      '<div class="verdict ' + (right ? (knapp ? 'ok2' : 'ok') : 'bad') + '">' +
+        (right ? (knapp ? 'Vertretbar — der Unterschied ist kleiner als 0,3bb' : 'Richtig') : 'Das kostet') +
+        ' — bestes Ergebnis: <b>' + ev.best.label + '</b> mit ' + ev.best.ev.toFixed(2) + 'bb' +
+        '<small>Du: ' + gewaehlt.label + ' (' + gewaehlt.ev.toFixed(2) + 'bb) · ' +
+        st.right + ' von ' + st.total + ' richtig</small></div>' +
+      rfEvTable() + rfSplitPanel();
+
+    const weiter = '<div class="planactions" style="margin-top:.6rem"><button class="primary" id="rfNext">Nächste Hand ▸</button></div>';
+
+    if (!gewaehlt.bet) {
+      out += '<div class="hpnote-sm">Check heißt Showdown: du gewinnst den Pot von ' + q.pot.toFixed(1) +
+        'bb in ' + (ev.split.anteilVorne * 100).toFixed(0) + '% der Fälle. Er hatte ' + rfZeigeHand() + ' — ' +
+        (rfHeroVorne() ? 'du hättest den Showdown gewonnen.' : 'er hätte den Showdown gewonnen.') + '</div>' + weiter;
+      $('#rfOut').innerHTML = out;
+      $('#rfNext').onclick = rfNew;
+      rfScore();
+      return;
+    }
+
+    /* Du hast gebettet — seine Antwort kommt aus seiner ECHTEN Hand, damit
+       der Showdown später zur Geschichte passt. */
+    const antwort = P.RiverDrill.villainReply(q, gewaehlt.bet);
+    if (antwort !== 'RAISE') {
+      out += '<div class="hpnote-sm">Er ' + (antwort === 'CALL' ? 'callt' : 'foldet') + '. Er hatte ' + rfZeigeHand() +
+        (antwort === 'CALL'
+          ? (rfHeroVorne() ? ' — ' + gewaehlt.bet.toFixed(1) + 'bb extra kassiert.'
+                           : ' — die Bet hat dich ' + gewaehlt.bet.toFixed(1) + 'bb gekostet.')
+          : '.') + '</div>' + weiter;
+      $('#rfOut').innerHTML = out;
+      $('#rfNext').onclick = rfNew;
+      rfScore();
+      return;
+    }
+
+    const mult = P.RiverDrill.RAISE_MULT[(P.rng() * P.RiverDrill.RAISE_MULT.length) | 0];
+    const rs = P.RiverDrill.raiseSpot(q, gewaehlt.bet, mult);
+    S.rf.raise = { rs: rs, bet: gewaehlt.bet };
+    out += '<div class="rfask" style="margin-top:.8rem">Er <b>check-raist auf ' + rs.raiseTo.toFixed(1) +
+      'bb</b>. Du musst <b>' + rs.toCall.toFixed(1) + 'bb</b> in einen Pot von ' + rs.potNow.toFixed(1) +
+      'bb callen.</div><div class="opts" id="rfOpts2"></div>';
+    $('#rfOut').innerHTML = out;
+    [['CALL', 'Call'], ['FOLD', 'Fold']].forEach(pair => {
+      const b = document.createElement('button');
+      b.className = 'opt'; b.textContent = pair[1];
+      b.onclick = () => rfRaiseAnswer(pair[0]);
+      $('#rfOpts2').appendChild(b);
+    });
+    rfScore();
+  }
+
+  function rfRaiseAnswer(key) {
+    const rs = S.rf.raise.rs;
+    const right = (key === 'CALL') === rs.lohnt;
+    const st = S.stats.river || (S.stats.river = { right: 0, total: 0 });
+    st.total++; if (right) st.right++;
+    save();
+
+    $('#rfOut').innerHTML =
+      '<div class="verdict ' + (right ? 'ok' : 'bad') + '">' + (right ? 'Richtig' : 'Das kostet') +
+        ' — nach dem Modell ist <b>' + (rs.lohnt ? 'Call' : 'Fold') + '</b> die bessere Antwort' +
+        '<small>Du: ' + (key === 'CALL' ? 'Call' : 'Fold') + ' · ' + st.right + ' von ' + st.total + ' richtig</small></div>' +
+      '<div class="rfsplit">' +
+        '<div><b>' + (rs.breakeven * 100).toFixed(0) + '%</b><span>Bluffs braucht seine Raise-Range, damit dein Call bei null liegt</span></div>' +
+        '<div><b>' + (rs.bluffAnteil * 100).toFixed(0) + '%</b><span>hat sie im Modell (' + rs.nBluff + ' Bluff- gegen ' + rs.nValue + ' Value-Kombos)</span></div>' +
+        '<div><b>' + (rs.evCall >= 0 ? '+' : '') + rs.evCall.toFixed(1) + 'bb</b><span>EV des Calls unter dieser Annahme</span></div></div>' +
+      '<div class="hpnote-sm">Er hatte ' + rfZeigeHand() + ' — dein Call hätte hier <b>' +
+        (rfHeroVorne() ? 'gewonnen' : 'verloren') + '</b>. Das ist aber nur diese eine Hand: entschieden wird ' +
+        'die Frage vom <b>Bluff-Anteil</b>, nicht vom Ausgang. Deshalb steht die Breakeven-Zahl links — sie ist ' +
+        'die, die am Tisch in den Kopf gehört. Wie viele Bluffs jemand wirklich hat, sagt dir keine Rechnung, ' +
+        'sondern der Gegner.</div>' +
+      rfEvTable() +
+      '<div class="planactions" style="margin-top:.6rem"><button class="primary" id="rfNext">Nächste Hand ▸</button></div>';
+    $('#rfNext').onclick = rfNew;
+    rfScore();
+  }
+
   /* ============================ RANGE-DESIGNER ====================== *
    * Push/Fold mit ICM. Die Rechnung steht in js/icm.js, hier nur Eingabe
    * und Darstellung.
@@ -2625,7 +2799,7 @@
     if (v === 'eigene') renderOwn();
     if (v === 'plan') renderPlan();
     if (v === 'range' && !$('#rdOut').children.length) { runRangeDesigner(); scNewQuestion(); }
-    if (v === 'rechnen' && !$('#mtOpts').children.length) { mtScore(); mtNew(); renderSizings(); }
+    if (v === 'rechnen' && !$('#mtOpts').children.length) { mtScore(); mtNew(); renderSizings(); rfNew(); }
     if (v === 'haende' && !$('#hpGrid').children.length) {
       renderHpGrid();
       selectHand(S.hp.sel);
@@ -2729,6 +2903,7 @@
     /* --- Range-Designer --- */
     $('#rdRun').onclick = runRangeDesigner;
     $('#scNew').onclick = scNewQuestion;
+    $('#rfNew').onclick = rfNew;
     const setRd = o => { for (const k in o) $(k).value = o[k]; runRangeDesigner(); };
     $('#rdBubbleNow').onclick = () => setRd({
       '#rdHero': 12, '#rdLeft': 100, '#rdBubble': 1, '#rdAvg': 25,

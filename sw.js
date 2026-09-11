@@ -30,7 +30,7 @@
    alten Stand.
    ========================================================================= */
 
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v12';
 const CACHE_NAME = 'pokertrainer-' + CACHE_VERSION;
 
 /* Die komplette App. Reihenfolge egal, Vollständigkeit nicht:
@@ -58,6 +58,7 @@ const PRECACHE = [
   'js/w2dleaks.js',
   'js/w2dpost.js',
   'js/ownhands.js',
+  'js/riverdrill.js',
   'js/app.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
