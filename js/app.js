@@ -890,7 +890,7 @@
     const c = S.ctx;
     return `<div>${md(P.rangeAdvText(c))}</div><div>${md(P.nutAdvText(c))}</div>
       <div>Board: <b>${c.tex.label}</b> — Dynamik ${c.tex.dyn}/10 (${c.tex.static ? 'statisch' : 'dynamisch'})</div>
-      <div>Seine Range: ${pct(c.villBuckets.strongPct)} Two-Pair+, ${pct(c.villBuckets.drawPct)} Draws, ${pct(c.villBuckets.airPct)} Air</div>`;
+      <div>Seine Range: ${pct(c.villBuckets.strongPct)} Overpair/TPTK+, ${pct(c.villBuckets.drawPct)} Draws, ${pct(c.villBuckets.airPct)} Air</div>`;
   }
 
   /* ========================= Handklassen-Quiz ======================== *
@@ -1014,7 +1014,7 @@
         <span>SPR ${c.spr}</span></div>
       <div>${md(P.rangeAdvText(c))}</div>
       <div style="margin-top:.4rem">${md(P.nutAdvText(c))}</div>
-      <div style="margin-top:.5rem" class="muted">Deine Range: ${pct(c.heroBuckets.strongPct)} Two-Pair+ · ${pct(c.heroBuckets.drawPct)} Draws · ${pct(c.heroBuckets.airPct)} Air</div>`;
+      <div style="margin-top:.5rem" class="muted">Deine Range: ${pct(c.heroBuckets.strongPct)} Overpair/TPTK+ · ${pct(c.heroBuckets.drawPct)} Draws · ${pct(c.heroBuckets.airPct)} Air</div>`;
 
     // Panel 2: Gegner-Range
     const vb = c.villBuckets;
@@ -1026,10 +1026,10 @@
           ${b.list.slice(0, 4).map(x => `<div class="bucket"><span>${x.name}</span>
             <span class="n">${pct(x.pct)}</span><span class="n"></span>
             <span class="bbar"><i style="width:${Math.min(100, x.pct * 260)}%;background:${bucketColor(x.name)}"></i></span></div>`).join('')}
-          <div class="muted">${pct(b.strongPct)} Two-Pair+ · ${pct(b.airPct)} Luft</div></div>`;
+          <div class="muted">${pct(b.strongPct)} Overpair/TPTK+ · ${pct(b.airPct)} Luft</div></div>`;
       }).join('') +
         `<div class="muted" style="border-top:1px dashed var(--line);padding-top:.4rem">
-          → <b>${pct(c.mwDanger)}</b> Chance, dass <b>mindestens einer</b> Two-Pair-oder-besser hat.
+          → <b>${pct(c.mwDanger)}</b> Chance, dass <b>mindestens einer</b> Overpair/TPTK-oder-besser hat.
           Heads-up wären es nur ${pct(S.villBuckets[0].strongPct)}. Genau deshalb stirbt hier der dünne Value.</div>`;
     } else
     $('#fbVillain').innerHTML =
@@ -1037,7 +1037,7 @@
       vb.list.slice(0, 9).map(b => `
         <div class="bucket"><span>${b.name}</span><span class="n">${pct(b.pct)}</span><span class="n">${b.w.toFixed(0)}</span>
           <span class="bbar"><i style="width:${Math.min(100, b.pct * 260)}%;background:${bucketColor(b.name)}"></i></span></div>`).join('') +
-      `<div class="muted" style="margin-top:.5rem">→ Er hat <b>${pct(vb.strongPct)}</b> Two-Pair-oder-besser, <b>${pct(vb.airPct)}</b> reine Luft.</div>`;
+      `<div class="muted" style="margin-top:.5rem">→ Er hat <b>${pct(vb.strongPct)}</b> Overpair/TPTK-oder-besser, <b>${pct(vb.airPct)}</b> reine Luft.</div>`;
 
     // Panel 3: Relative Stärke
     const p = c.heroPct;

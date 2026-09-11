@@ -240,7 +240,7 @@
             : 'Ranges ausgeglichen → selektiv betten';
     const hs = ctx.heroBuckets.strongPct * 100, vs = ctx.villBuckets.strongPct * 100;
     return `**Range-Advantage:** Roh-Equity deiner Range **${((0.5 + (ctx.advEq !== undefined ? ctx.advEq : 0)) * 100).toFixed(1)}%**; ` +
-      `Two-Pair+ hast du **${hs.toFixed(1)}%** vs seine **${vs.toFixed(1)}%** → ${who}.`;
+      `Starke Hände (Overpair/TPTK oder besser) hast du **${hs.toFixed(1)}%** vs seine **${vs.toFixed(1)}%** → ${who}.`;
   }
   function nutAdvText(ctx) {
     const h = ctx.heroNut * 100, v = ctx.villNut * 100;

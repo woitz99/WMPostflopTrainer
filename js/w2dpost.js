@@ -174,11 +174,11 @@
       // Straße durchgehen und bei jeder Hero-Aktion bewerten.
       const street = { potStart: pot };
       let facingAmt = 0, streetPot = pot;
-      let lastAggressor = null;
+      let lastAggressor = null, facingKind = null;
       for (const a of acts) {
         if (a.player !== hero) {
           if (a.kind === 'bet' || a.kind === 'raise' || a.kind === 'allin') {
-            facingAmt = a.amount; lastAggressor = a.player;
+            facingAmt = a.amount; lastAggressor = a.player; facingKind = a.kind;
           }
           streetPot += a.amount;
           continue;
@@ -186,7 +186,14 @@
         let rec, picked, mode;
         if (facingAmt > 0 && lastAggressor && lastAggressor !== hero) {
           mode = 'FACE';
-          const villBet = P.bettingRangeOf(villRange, board, facingAmt / Math.max(1, streetPot - facingAmt), ctx, P.PROFILES.reg);
+          /* Eine Erhöhung ist keine Bet. Gegen einen Check-Raise mit der
+             Bet-Tabelle zu rechnen, setzt rund ein Drittel Luft in seiner
+             Range an — die Equity fällt dadurch zu hoch aus und der Call
+             zu gut. Gemessen an einer River-Hand aus der Session: 43,7 %
+             statt 34,5 %. */
+          const villBet = facingKind === 'raise'
+            ? P.narrow(villRange, board, 'raise', { ctx })
+            : P.bettingRangeOf(villRange, board, facingAmt / Math.max(1, streetPot - facingAmt), ctx, P.PROFILES.reg);
           const eqVsBet = P.equityVsRange(row.cards, villBet, board, SIMS_EQ).eq;
           const fctx = Object.assign({}, ctx, {
             facing: { toCall: facingAmt, potNow: streetPot, betPct: facingAmt / Math.max(1, streetPot - facingAmt) },
