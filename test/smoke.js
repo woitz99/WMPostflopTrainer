@@ -349,6 +349,13 @@ ok(cl('AhQd', 'Jh9h3c').hasBDFD === false, 'offsuit -> kein BDFD');
 ok(cl('AhQh', 'Jh9d3c').hasBDFD === true, 'AQhh auf Jh93 = Backdoor-FD');
 ok(cl('Ah2h', 'Kh7h3c').hasNutFD === true, 'A2hh auf Kh7h3 = Nut-Flushdraw');
 ok(cl('9h8h', 'Kh7h3c').hasNutFD === false, '98hh auf Kh7h3 = kein Nut-FD');
+// Der Nut-Draw haengt an den UNGESEHENEN Karten, nicht an den sichtbaren.
+// Vorher galt jeder Draw als Nut-Draw, sobald die eigenen Karten die
+// hoechsten sichtbaren der Farbe waren -- 69% aller "Nut"-Meldungen falsch.
+ok(cl('KhQh', 'Th7h3c').hasNutFD === false, 'KQhh auf Th7h3: Ah ungesehen -> kein Nut-FD');
+ok(cl('QhJh', 'Th5h2c').hasNutFD === false, 'QJhh auf Th5h2: Ah und Kh ungesehen -> kein Nut-FD');
+ok(cl('Kh2h', 'Ah7h3c').hasNutFD === true, 'K2hh auf Ah7h3: das Ass liegt fuer alle -> Kh ist der Nut-FD');
+ok(cl('Qh2h', 'AhKh3c').hasNutFD === true, 'Q2hh auf AhKh3: A und K liegen -> Qh ist der Nut-FD');
 ok(cl('2h3d', '9c8d7s').hasOESD === false, '23 auf 987 -> Board-Straight, kein eigener OESD');
 ok(cl('Th9d', '8c7d2s').hasOESD === true, 'T9 auf 872 = OESD');
 

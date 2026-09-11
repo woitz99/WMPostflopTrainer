@@ -14,7 +14,7 @@
   const S = {
     cfg: {
       stacks: ['mid', 'deep'], tags: ['SRP', 'DEF', '3BP', 'BvB', 'MW'],
-      multi: true, autoHint: false, profile: 'reg'
+      multi: true, autoHint: false, profile: 'reg', quiz: true
     },
     stats: load('pt_stats', { hands: 0, dec: 0, pts: 0, max: 0, byTag: {}, byStreet: {}, byHand: {}, mistakes: [], reviews: 0, mastered: 0 }),
     review: load('pt_review', { items: [] }),
@@ -23,6 +23,7 @@
     reviewMode: false, queue: [], qIdx: 0,
     hp: { sel: 'AKo', rangeKey: 'bb_vs_btn_def', cache: {}, evCache: {}, busy: false },
     rd: { cache: {} },
+    sc: { cache: {}, q: null, busy: false },
     mt: load('pt_mental', { right: 0, total: 0, streak: 0, best: 0 }),
     own: { id: null, step: 0, picks: [] }
   };
@@ -241,6 +242,18 @@
   }
 
   /** Kontext aus Gegnersicht. */
+  /**
+   * Gewichte sind nur relativ zueinander gemeint — jede Auswertung normiert
+   * ohnehin auf die Summe. Über drei Straßen multiplizieren sich die Filter
+   * aber zu winzigen Werten, und unter 0.02 fällt eine Kombo beim Packen des
+   * Wiederholungs-Schnappschusses ersatzlos raus. Hochskalieren hält die
+   * Verhältnisse und die Range vollständig.
+   */
+  function rescale(range) {
+    const m = range.reduce((a, x) => Math.max(a, x.w), 0);
+    return (m > 0 && m < 1) ? range.map(x => ({ c: x.c, w: x.w / m })) : range;
+  }
+
   function villCtx(extra) {
     const c = S.ctx;
     return Object.assign({}, c, {
@@ -300,14 +313,8 @@
     }
     if (S.spot.heroIP) {
       const act = villainOpenAction();
-      if (act.type === 'bet') {
-        const potBefore = S.pot;
-        S.pot += act.amt; S.invV = act.amt;
-        pushLog('vil', `Gegner bettet ${act.amt.toFixed(1)}bb (${pct(act.amt / potBefore)})`);
-        renderTable();
-        // potNow muss seine Bet ENTHALTEN, sonst stimmen Pot Odds und MDF nicht
-        askFacing(act.amt, S.pot, act.amt / potBefore);
-      } else { S.villChecked = true; pushLog('vil', 'Gegner checkt'); askBetting(); }
+      if (act.type === 'bet') villainBets(act);
+      else { S.villChecked = true; pushLog('vil', 'Gegner checkt'); askBetting(); }
     } else {
       askBetting();
     }
@@ -323,6 +330,22 @@
     return { type: 'bet', amt };
   }
 
+  /**
+   * Seine Bet buchen: Pot, Einsatz, Log, Frage — bewusst an EINER Stelle.
+   * Vorher stand dieselbe Buchung zweimal im Code, und die zweite Kopie (du
+   * checkst OOP, er bettet danach) hat den Pot nicht erhöht und eine
+   * Prozentzahl gelesen, die es nirgends gibt (`act.pctv`): im Log stand
+   * "(NaN%)", und alle Folgesizings liefen auf einem zu kleinen Pot.
+   */
+  function villainBets(act) {
+    const potBefore = S.pot;
+    S.pot += act.amt; S.invV = (S.invV || 0) + act.amt;
+    pushLog('vil', `Gegner bettet ${act.amt.toFixed(1)}bb (${pct(act.amt / potBefore)})`);
+    renderTable();
+    // potNow muss seine Bet ENTHALTEN, sonst stimmen Pot Odds und MDF nicht
+    return askFacing(act.amt, S.pot, act.amt / potBefore);
+  }
+
   /* ------------------------------ Fragen ----------------------------- */
   /**
    * Baut die anklickbaren Sizings.
@@ -334,7 +357,11 @@
   function buildBetOptions() {
     const rem = remH(), out = [], groups = [];
     for (const o of P.BET_OPTIONS) {
-      if (o.pct === 0) { out.push({ key: o.key, label: o.label, amt: '' }); continue; }
+      if (o.pct === 0) {
+        out.push({ key: o.key, label: o.label, amt: '' });
+        S.q.optSrc[o.key] = [o.key];
+        continue;
+      }
       if (rem <= 0.05) continue;
       const amt = Math.min(+(o.pct * S.pot).toFixed(1), rem);
       if (amt < 0.1) continue;
@@ -352,6 +379,7 @@
       const score = Math.max(...g.keys.map(k => S.rec.scores[k] || 0));
       const key = g.forced ? 'BET_AI' : best;
       S.rec.scores[key] = score;
+      S.q.optSrc[key] = g.keys.slice();
       if (g.forced) S.aiAmount = g.amt;
       const allIn = g.amt >= rem - 0.05;
       out.push({
@@ -363,12 +391,13 @@
   }
 
   function askBetting() {
-    S.q = { mode: 'BET' };
+    S.q = { mode: 'BET', optSrc: {} };
     S.aiAmount = null;
     S.rec = P.recommendBetting(S.ctx.cls, S.ctx);
     const opts = buildBetOptions();
     S.q.optKeys = opts.map(o => o.key);
     S.q.optLabels = {}; opts.forEach(o => S.q.optLabels[o.key] = o.label);
+    limitToOptions();
     /* Der Fragetext wird HERGELEITET, nicht aus gespeichertem Zustand gelesen.
        Im BET-Modus impliziert die Reihenfolge bereits, dass alle vor dir
        gecheckt haben — sonst stuende hier eine Bet und wir waeren im
@@ -403,14 +432,17 @@
       + hinter.map(shortName).join(' und ') + ' sitzt hinter dir — deine Aktion?';
   }
 
-  function askFacing(toCall, potNow, betPct, label) {
+  function askFacing(toCall, potNow, betPct, label, actionRange) {
     const rem = remH();
     const call = Math.min(toCall, rem);
     const facing = { toCall, potNow, betPct, label: label || `Bet ${toCall.toFixed(1)}bb` };
-    // Seine Range -> Profil anwenden (eine Station blufft hier fast nicht)
-    const villBet = P.bettingRangeOf(S.villRange, S.board, betPct, S.ctx, S.profile);
+    /* Seine Range für GENAU diese Aktion — und zwar EINMAL gefiltert.
+       Für eine Bet leitet bettingRangeOf sie aus der Größe ab (samt Profil:
+       eine Station blufft hier fast nicht). Ein Raise bringt seine eigene
+       Range mit, weil eine Erhöhung eine ganz andere ist als eine Bet. */
+    const villBet = actionRange || P.bettingRangeOf(S.villRange, S.board, betPct, S.ctx, S.profile);
     const eqVsBet = P.equityVsRange(S.heroHole, villBet, S.board, 120000).eq;
-    S.q = { mode: 'FACE', facing, villBet };
+    S.q = { mode: 'FACE', facing, villBet, optSrc: {} };
     S.rec = P.recommendFacing(S.ctx.cls, Object.assign({}, S.ctx, { facing, eqVsBettingRange: eqVsBet }));
     S.ctxFacing = Object.assign({}, S.ctx, { facing, eqVsBettingRange: eqVsBet });
 
@@ -420,6 +452,7 @@
     const canRaise = rem > call + 0.1 && remV() > 0.05;
     const opts = [];
     for (const o of P.FACING_OPTIONS) {
+      S.q.optSrc[o.key] = [o.key];
       if (o.key === 'FOLD') { opts.push({ key: o.key, label: o.label, amt: '' }); continue; }
       if (o.key === 'CALL') {
         opts.push({ key: o.key, label: call >= rem - 0.05 ? 'Call All-in' : o.label, amt: `${call.toFixed(1)}bb` });
@@ -431,6 +464,7 @@
       if (g) {   // identische Höhe -> zusammenfassen, bessere Bewertung behalten
         const score = Math.max(S.rec.scores[g.key] || 0, S.rec.scores[o.key] || 0);
         S.rec.scores[g.key] = score;
+        S.q.optSrc[g.key].push(o.key);
         continue;
       }
       const allIn = to >= S.eff - 0.05;
@@ -441,6 +475,7 @@
     }
     S.q.optKeys = opts.map(o => o.key);
     S.q.optLabels = {}; opts.forEach(o => S.q.optLabels[o.key] = o.label);
+    limitToOptions();
     renderAsk(`Er setzt ${toCall.toFixed(1)}bb in einen Pot von ${(potNow - toCall).toFixed(1)}bb — deine Aktion?`, opts);
   }
   function raiseTarget(key, toCall) {
@@ -569,6 +604,39 @@
     else askBetting();
   }
 
+  /**
+   * Bewertet wird nur, was auch anklickbar war.
+   *
+   * Die Engine bewertet immer alle vier Aktionen. Ist eine davon in diesem
+   * Spot gar nicht spielbar — mit den Nuts am River all-in gecallt, der
+   * Reststack liegt schon im Pot — stand sie trotzdem als "Baseline" im
+   * Urteil, und die eigene Aktion bekam nur den Rest der Skala. Deshalb
+   * werden Bewertung und Baseline hier auf die angebotenen Optionen
+   * eingedampft; dass die stärkste Aktion fehlt, wird stattdessen gesagt.
+   */
+  function limitToOptions() {
+    const keys = (S.q && S.q.optKeys) || [];
+    if (!keys.length || !S.rec) return;
+    const engineBest = S.rec.best;
+    const top = Math.max(...keys.map(k => S.rec.scores[k] || 0)) || 1;
+    for (const k of keys) S.rec.scores[k] = Math.round((S.rec.scores[k] || 0) / top * 100);
+    S.rec.best = keys.reduce((a, b) => (S.rec.scores[a] || 0) >= (S.rec.scores[b] || 0) ? a : b);
+    /* "Nicht angeboten" heißt: die Aktion steckt auch in keiner
+       zusammengefassten Schaltfläche. Sonst stünde der Hinweis da, obwohl
+       der All-in-Knopf genau diese Aktion ist. */
+    const src = (S.q && S.q.optSrc) || {};
+    const covered = keys.some(k => (src[k] || [k]).indexOf(engineBest) >= 0);
+    /* Wenn gar kein Raise mehr geht, ist auch die Begründung "Raise-Kandidat"
+       falsch — sie empfiehlt etwas, das der Stack nicht mehr hergibt. */
+    if (!keys.some(k => k === 'RAISE_S' || k === 'RAISE_L') && S.q.mode === 'FACE') {
+      S.rec.reasons = S.rec.reasons.filter(r => !/^Raise-Kandidat/.test(r));
+    }
+    if (!covered) {
+      S.rec.reasons.push(`Stärker wäre **${labelOf(engineBest)}** — das ist hier keine Option mehr (der ` +
+        `Reststack reicht nicht dafür). Bewertet wird nur, was du anklicken konntest.`);
+    }
+  }
+
   function labelOf(key) {
     // Die angezeigte Beschriftung gewinnt (z.B. "All-in" statt "Bet 130%")
     if (S.q && S.q.optLabels && S.q.optLabels[key]) return S.q.optLabels[key];
@@ -623,12 +691,10 @@
       // Gegner ist IP und agiert jetzt
       S.heroRange = P.narrow(S.heroRange, S.board, 'check', { ctx: S.ctx });
       const act = villainOpenAction();
-      if (act.type === 'bet') {
-        S.villRange = P.narrow(S.villRange, S.board, 'bet', { ctx: villCtx() });
-        pushLog('vil', `Gegner bettet ${act.amt.toFixed(1)}bb (${pct(act.pctv)})`);
-        renderTable();
-        return askFacing(act.amt, S.pot + act.amt, act.pctv);
-      }
+      // Kein zusätzliches narrow('bet') hier: askFacing filtert die Range
+      // bereits mit bettingRangeOf, und zweimal filtern hieße, seine
+      // Bet-Frequenz zweimal einzurechnen (siehe applyFacing).
+      if (act.type === 'bet') return villainBets(act);
       S.villRange = P.narrow(S.villRange, S.board, 'check', { ctx: villCtx() });
       pushLog('vil', 'Gegner checkt');
       return nextStreet();
@@ -661,16 +727,23 @@
     // Gegner raist — raiseTo ist sein GESAMTEINSATZ dieser Straße
     const raiseTo = Math.min(S.eff, +(bet * (resp === 'RAISE_L' ? 3.4 : 2.6)).toFixed(1));
     const add = raiseTo - (S.invV || 0);
-    S.villRange = P.narrow(S.villRange, S.board, 'raise', { ctx: vc });
+    const villRaise = P.narrow(S.villRange, S.board, 'raise', { ctx: vc });
     S.pot += add; S.invV = raiseTo;
     pushLog('vil', `Gegner raist auf ${raiseTo.toFixed(1)}bb${remV() <= 0.05 ? ' (All-in)' : ''}`);
     renderTable();
-    return askFacing(raiseTo - S.invH, S.pot, raiseTo / potBefore);
+    return askFacing(raiseTo - S.invH, S.pot, raiseTo / potBefore, null, villRaise);
   }
 
   function applyFacing(key) {
     const f = S.q.facing;
     if (key === 'FOLD') { pushLog('you', 'Du foldest'); return endHand('heroFold', 0); }
+    /* Ab hier ist seine Range die, MIT DER ER GESETZT HAT — genau die, gegen
+       die oben die Equity gerechnet wurde, und sie gilt auch auf den
+       Folgestraßen. Vorher wurde sie auf dem einen Weg zusätzlich durch
+       narrow('bet') geschickt und auf dem anderen gar nicht: derselbe Spot
+       ergab je nach Position im Median 12 Prozentpunkte Equity-Unterschied
+       und in einem Drittel der Fälle eine andere Empfehlung. */
+    if (S.q.villBet && S.q.villBet.length) S.villRange = rescale(S.q.villBet);
     if (key === 'CALL') {
       const call = Math.min(f.toCall, remH());
       S.pot += call; S.invH = (S.invH || 0) + call;
@@ -758,13 +831,20 @@
       `<div class="${l.who || ''}">${l.t}</div>`).join('');
   }
 
+  /* SPR aus dem Kontext, nicht aus dem Live-Pot: die Engine rechnet mit dem
+     Wert vom Straßenbeginn (computeCtx), und die Schwellen im Code ("SPR < 1.5
+     = Commitment", raiseDrive bei SPR < 1.2) beziehen sich auf genau den.
+     Vorher stand im Nenner des Chips der Pot INKLUSIVE seiner Bet: angezeigt
+     wurden 1.9, gerechnet wurde mit 3.4. */
+  function sprNow() { return (S.ctx ? S.ctx.spr : S.eff / S.pot).toFixed(1); }
+
   function renderSpot() {
     const sp = S.spot, st = P.STACKS[S.band];
     $('#spotName').textContent = sp.name;
     $('#chipTag').innerHTML = `<b>${sp.tag}</b>`;
     $('#chipStack').innerHTML = `Stacks <b>${st.bb}bb</b>`;
     $('#chipPot').innerHTML = `Pot <b>${S.pot.toFixed(1)}bb</b>`;
-    $('#chipSpr').innerHTML = `SPR <b>${(S.eff / S.pot).toFixed(1)}</b>`;
+    $('#chipSpr').innerHTML = `SPR <b>${sprNow()}</b>`;
     $('#chipPos').innerHTML = `<b>${sp.heroIP ? 'IP' : 'OOP'}</b> · ${sp.heroPos} vs ${sp.villPos}`;
     const pc = $('#chipProfile');
     if (S.profile && S.profile.key !== 'reg') {
@@ -782,7 +862,7 @@
     const c = P.classify(S.heroHole, S.board);
     $('#heroClass').textContent = c.made + (c.draws.length ? ' + ' + c.draws.join(', ') : '');
     $('#chipPot').innerHTML = `Pot <b>${S.pot.toFixed(1)}bb</b>`;
-    $('#chipSpr').innerHTML = `SPR <b>${(S.eff / S.pot).toFixed(1)}</b>`;
+    $('#chipSpr').innerHTML = `SPR <b>${sprNow()}</b>`;
     renderLog();
   }
 
@@ -810,6 +890,101 @@
     return `<div>${md(P.rangeAdvText(c))}</div><div>${md(P.nutAdvText(c))}</div>
       <div>Board: <b>${c.tex.label}</b> — Dynamik ${c.tex.dyn}/10 (${c.tex.static ? 'statisch' : 'dynamisch'})</div>
       <div>Seine Range: ${pct(c.villBuckets.strongPct)} Two-Pair+, ${pct(c.villBuckets.drawPct)} Draws, ${pct(c.villBuckets.airPct)} Air</div>`;
+  }
+
+  /* ========================= Handklassen-Quiz ======================== *
+   * Die Frage, die im Feedback bisher fehlte: nicht "war DEINE Hand ein
+   * Call", sondern "welche Hände sind hier überhaupt ein Call". Gefragt
+   * wird dieselbe Stelle mit einer anderen Hand aus DEINER Range. Die
+   * Antwort kommt aus derselben Engine wie die Hauptempfehlung — hier steht
+   * nichts, was der Trainer nicht auch für die echte Hand rechnen würde.
+   * ------------------------------------------------------------------ */
+  function quizPickHand() {
+    const dead = new Set(S.board.concat(S.heroHole, ...(S.villHoles || [])));
+    const mine = P.tierOf(S.ctx.cls);
+    const pool = S.heroRange.filter(x => x.w > 0.05 && !dead.has(x.c[0]) && !dead.has(x.c[1]));
+    if (!pool.length) return null;
+    /* Eine Hand aus einer ANDEREN Stärkeklasse ist die lehrreichere Frage —
+       sonst lautet die Antwort meistens genau wie gerade eben. */
+    const other = pool.filter(x => P.tierOf(P.classify(x.c, S.board)) !== mine);
+    const from = other.length >= 3 ? other : pool;
+    let r = P.rng() * from.reduce((a, x) => a + x.w, 0);
+    for (const x of from) { r -= x.w; if (r <= 0) return x.c.slice(); }
+    return from[from.length - 1].c.slice();
+  }
+
+  function quizBuild() {
+    if (S.cfg.quiz === false || !S.ctx || !S.q || !S.q.optKeys) return null;
+    const hole = quizPickHand();
+    if (!hole) return null;
+    const cls = P.classify(hole, S.board);
+    /* Die Stärkewerte gehören zur QUIZ-Hand. Sonst stünde in der Begründung
+       die Equity der eben gespielten Hand unter einem anderen Handnamen. */
+    const rel = P.relativeStrength(hole, S.villRange, S.board).pct;
+    const eq = (S.villRanges && S.villRanges.length > 1)
+      ? P.Multiway.equityMulti(hole, S.villRanges, S.board, 8000).eq
+      : P.equityVsRange(hole, S.villRange, S.board, 60000).eq;
+    const base = { cls, heroPct: rel, heroEq: eq };
+    let rec;
+    if (S.q.mode === 'FACE' && S.ctxFacing && S.q.villBet) {
+      base.eqVsBettingRange = P.equityVsRange(hole, S.q.villBet, S.board, 60000).eq;
+      rec = P.recommendFacing(cls, Object.assign({}, S.ctxFacing, base));
+    } else {
+      rec = P.recommendBetting(cls, Object.assign({}, S.ctx, base));
+    }
+    /* Bewertet werden nur die Optionen, die auch angeboten wurden — und wie
+       im Hauptablauf zählt bei zusammengefassten Sizings die bessere. */
+    const keys = S.q.optKeys, src = S.q.optSrc || {};
+    const raw = {};
+    for (const k of keys) raw[k] = Math.max(...(src[k] || [k]).map(x => rec.scores[x] || 0));
+    const top = Math.max(1, ...keys.map(k => raw[k]));
+    const scores = {};
+    for (const k of keys) scores[k] = Math.round(raw[k] / top * 100);
+    return { hole, cls, rec, scores, keys, eq };
+  }
+
+  function miniCards(cards) {
+    return cards.map(c => {
+      const u = P.SUITS[P.suitOf(c)];
+      return `<span class="card mini ${SUIT_CLASS[u] || ''}"><span class="r">${P.RANKS[P.rankOf(c)]}</span><span class="s">${P.SUIT_SYM[u]}</span></span>`;
+    }).join(' ');
+  }
+
+  function renderQuiz() {
+    const panel = $('#fbQuizPanel');
+    S.quiz = quizBuild();
+    if (!S.quiz) { panel.hidden = true; return; }
+    panel.hidden = false;
+    const q = S.quiz;
+    $('#fbQuiz').innerHTML = `<div class="quizask">Du hältst hier stattdessen ${miniCards(q.hole)}
+        <b>${q.cls.made}</b>${q.cls.draws.length ? ' + ' + q.cls.draws.join(', ') : ''} —
+        gleiches Board, gleiche Gegner-Range, gleiche Aktion vor dir. Was machst du damit?</div>
+      <div class="opts" id="quizOpts"></div>`;
+    const wrap = $('#quizOpts');
+    q.keys.forEach(k => {
+      const b = document.createElement('button');
+      b.className = 'opt';
+      b.textContent = labelOf(k);
+      b.onclick = () => quizAnswer(k);
+      wrap.appendChild(b);
+    });
+  }
+
+  function quizAnswer(key) {
+    const q = S.quiz;
+    if (!q) return;
+    const g = P.grade(q.scores, key);
+    const st = S.stats.quiz || (S.stats.quiz = { right: 0, total: 0 });
+    st.total++; if (g.pts >= 2) st.right++;
+    save();
+    const best = q.keys.reduce((a, b) => q.scores[a] >= q.scores[b] ? a : b);
+    $('#fbQuiz').innerHTML =
+      `<div class="verdict ${g.cls}">${g.rating} — mit ${miniCards(q.hole)} du: <b>${labelOf(key)}</b>${key !== best ? ' · Baseline: <b>' + labelOf(best) + '</b>' : ''}
+        <small>Bewertung ${q.scores[key]}/100 · Quiz insgesamt ${st.right}/${st.total} richtig</small></div>
+      <div class="scorebars">${q.keys.map(k => `<div class="sb ${k === key ? 'picked' : ''} ${k === best ? 'bestopt' : ''}">
+        <span class="name">${labelOf(k)}</span><span class="bar"><i style="width:${q.scores[k]}%"></i></span>
+        <span class="val">${q.scores[k]}</span></div>`).join('')}</div>
+      <ul class="reasons">${q.rec.reasons.map(r => `<li>${md(r)}</li>`).join('')}</ul>`;
   }
 
   function showFeedback(picked, g) {
@@ -879,6 +1054,7 @@
       `</ul><div class="muted" style="margin-top:.4rem">Hast du eine davon? → maximal Value. Kann <i>er</i> sie haben? → große Bets von ihm ernst nehmen.</div>`;
 
     $('#fbReasons').innerHTML = S.rec.reasons.map(r => `<li>${md(r)}</li>`).join('');
+    renderQuiz();
   }
 
   function fmtCombo(c) {
@@ -1324,6 +1500,173 @@
         <br><br>Der Pot am Flop unterstellt dein Open plus einen Caller, dazu SB und Ante.
         Lohnt sich, die 33-%-Spalte des aktuellen Levels im Kopf zu haben — dann musst du am
         Tisch nicht rechnen, sondern nur abzählen.</div>`;
+  }
+
+  /* ====================== SHOVE-CALL-TRAINER ======================== *
+   * Der Range-Designer oben beantwortet die Frage als Tabelle. Hier wird
+   * sie abgefragt, weil man am Tisch nicht nachschlägt. Die Antwort kommt
+   * aus derselben Rechnung (icm.js, defend.range) — es gibt hier keine
+   * zweite, handgeschriebene Range.
+   *
+   * Zwei Dinge kosten Zeit und sind deshalb so gelöst:
+   *   1. Eine ICM-Rechnung dauert je nach Feldgröße 0,2-3s. Sie hängt aber
+   *      NICHT von deiner Hand ab — pro Konfiguration wird sie einmal
+   *      gerechnet und gecacht, danach ist jede weitere Frage sofort da.
+   *   2. Die Shove-Größe wird nur aus drei Werten gezogen, damit der Cache
+   *      greift, statt bei jeder Frage neu zu rechnen.
+   * ------------------------------------------------------------------ */
+  const SC_SIMS = 12000;      // Schwelle schwankt dadurch um rund 1 Punkt
+
+  function scShoveSizes(cfg) {
+    const raw = [Math.max(2, cfg.shortBB - 4), cfg.shortBB, cfg.shortBB + 4];
+    const uniq = [];
+    for (const v of raw) {
+      const x = Math.round(Math.min(v, cfg.heroBB) * 2) / 2;
+      if (x >= 1.5 && !uniq.includes(x)) uniq.push(x);
+    }
+    return uniq.length ? uniq : [Math.min(cfg.shortBB, cfg.heroBB)];
+  }
+
+  /** Eine Handklasse ziehen — gewichtet nach Kombos, sonst kämen Paare viel zu oft. */
+  function scPickHand() {
+    const hands = P.HandProfile.allHandClasses();
+    const w = h => h.length === 2 ? 6 : h[2] === 's' ? 4 : 12;
+    let r = P.rng() * hands.reduce((a, h) => a + w(h), 0);
+    for (const h of hands) { r -= w(h); if (r <= 0) return h; }
+    return hands[0];
+  }
+
+  /** Konkrete Karten zu einer Handklasse, nur für die Anzeige. */
+  function scCardsOf(hc) {
+    const ri = c => P.RANKS.indexOf(c);
+    const a = ri(hc[0]), b = ri(hc[1]);
+    if (hc.length === 2) return [(a << 2) | 0, (b << 2) | 1];
+    return hc[2] === 's' ? [(a << 2) | 2, (b << 2) | 2] : [(a << 2) | 2, (b << 2) | 3];
+  }
+
+  function scSolve(cfg) {
+    const key = JSON.stringify(cfg);
+    if (S.sc.cache[key]) return S.sc.cache[key];
+    const r = P.ICM.pushFoldICM(Object.assign({}, cfg, { sims: SC_SIMS }));
+    // Seine Shove-Range als Index-Liste, damit sich die Equity DEINER Hand
+    // gegen genau die Range ausrechnen lässt, gegen die auch gecallt wird.
+    const IDX = P.ICM.classIndex();
+    r.shoveIdx = (r.defend.shoverPct != null ? P.ICM.topPct(r.defend.shoverPct) : r.push.range)
+      .map(h => IDX[h]).filter(i => i !== undefined);
+    S.sc.cache[key] = r;
+    return r;
+  }
+
+  function scNewQuestion() {
+    if (S.sc.busy) return;
+    const base = rdReadCfg();
+    const f = P.ICM.fieldModel(base);
+    if (!f.valid) {
+      $('#scOut').innerHTML = '<div class="hpnote-sm">Das Feld oben geht nicht auf — erst die Eingaben ' +
+        'korrigieren, sonst wäre auch die Antwort hier Unsinn.</div>';
+      return;
+    }
+    const sizes = scShoveSizes(base);
+    const cfg = Object.assign({}, base, { shortBB: sizes[(P.rng() * sizes.length) | 0] });
+    const hand = scPickHand();
+    const cached = !!S.sc.cache[JSON.stringify(cfg)];
+    if (!cached) $('#scOut').innerHTML = '<div class="panel wide hpbusy">Rechnet ICM für dieses Feld …</div>';
+    // Solange gerechnet wird, ist der Knopf tot — sonst klickt man ins Leere
+    // und wundert sich, dass die alte Frage stehen bleibt.
+    S.sc.busy = true;
+    $('#scNew').disabled = true;
+    setTimeout(() => {
+      const r = scSolve(cfg);
+      S.sc.busy = false;
+      $('#scNew').disabled = false;
+      S.sc.q = { cfg, hand, r, cards: scCardsOf(hand) };
+      scRenderQuestion();
+    }, cached ? 0 : 25);
+  }
+
+  function scRenderQuestion() {
+    const q = S.sc.q, c = q.cfg;
+    $('#scOut').innerHTML = `
+      <div class="scask">Noch <b>${c.left}</b> Spieler, <b>${c.bubble}</b> bis zur Bubble.
+        Du hast <b>${c.heroBB}bb</b>. Ein Shorty mit <b>${q.cfg.shortBB}bb</b> shovt vor dir.
+        Du hältst ${miniCards(q.cards)} <b>${q.hand}</b>.</div>
+      <div class="opts" id="scOpts"></div>`;
+    const wrap = $('#scOpts');
+    [['CALL', 'Call'], ['FOLD', 'Fold']].forEach(([k, lbl]) => {
+      const b = document.createElement('button');
+      b.className = 'opt'; b.textContent = lbl;
+      b.onclick = () => scAnswer(k);
+      wrap.appendChild(b);
+    });
+    scRenderScore();
+  }
+
+  function scRenderScore() {
+    const st = S.stats.shove;
+    $('#scScore').textContent = st && st.total
+      ? `${st.right} von ${st.total} richtig` : '';
+  }
+
+  function scAnswer(key) {
+    const q = S.sc.q; if (!q) return;
+    const r = q.r, IDX = P.ICM.classIndex();
+    const i = IDX[q.hand];
+    const eq = P.ICM.eqVsSet(i, r.shoveIdx);
+    const need = r.defend.need, po = r.defend.potOdds;
+    const isCall = r.defend.range.includes(q.hand);
+    const chipCall = r.defend.chipRange.includes(q.hand);
+    /* Grenzfall: liegt die Equity dicht an der Schwelle, ist die Frage keine
+       Wissensfrage mehr — dann zählt beides. Die Schwelle selbst ist
+       simuliert und auf rund einen Punkt genau. */
+    const knapp = Math.abs(eq - need) <= 0.015;
+    const right = knapp || (key === 'CALL') === isCall;
+    const st = S.stats.shove || (S.stats.shove = { right: 0, total: 0 });
+    st.total++; if (right) st.right++;
+    save();
+
+    const lehre = chipCall && !isCall
+      ? `<div class="hpnote-sm">Genau der Fehler, um den es geht: <b>in Chips wäre das ein Call</b>
+          (Pot Odds ${(po * 100).toFixed(1)}%), <b>in Geld nicht</b> (ICM ${(need * 100).toFixed(1)}%).
+          Solche Hände kosten an der Bubble am meisten, weil sie sich richtig anfühlen.</div>`
+      : isCall
+        ? '<div class="hpnote-sm">Diese Hand hält auch dem ICM-Aufschlag stand — hier ist Folden der Fehler.</div>'
+        : `<div class="hpnote-sm">Auch ohne ICM wäre das kein Call: ${(eq * 100).toFixed(1)}% reichen
+            nicht einmal für die reinen Pot Odds von ${(po * 100).toFixed(1)}%.</div>`;
+
+    const grid = P.HandProfile.allHandClasses().map(hc => {
+      const d = r.defend.range.includes(hc), ch = r.defend.chipRange.includes(hc);
+      const cl = d ? 'rdp' : ch ? 'rdc' : 'rdf';
+      return `<button class="hpcell ${cl}${hc === q.hand ? ' scme' : ''}" title="${hc}">${hc}</button>`;
+    }).join('');
+
+    $('#scOut').innerHTML = `
+      <div class="verdict ${right ? (knapp ? 'ok2' : 'ok') : 'bad'}">
+        ${right ? (knapp ? 'Grenzfall — beides vertretbar' : 'Richtig') : 'Falsch'} —
+        mit ${miniCards(q.cards)} <b>${q.hand}</b> gegen ${q.cfg.shortBB}bb: <b>${isCall ? 'Call' : 'Fold'}</b>
+        <small>Du: ${key === 'CALL' ? 'Call' : 'Fold'} · ${(S.stats.shove.right)} von ${S.stats.shove.total} richtig</small>
+      </div>
+      <div class="scnums">
+        <div><b>${(eq * 100).toFixed(1)}%</b><span>deine Equity gegen seine Shove-Range (${(r.defend.shoverPct != null ? r.defend.shoverPct : r.push.pct).toFixed(0)}% der Hände)</span></div>
+        <div><b>${(need * 100).toFixed(1)}%</b><span>nötig mit ICM</span></div>
+        <div><b>${(po * 100).toFixed(1)}%</b><span>nötig nach reinen Pot Odds</span></div>
+        <div><b>${r.metrics.bubbleFactor.toFixed(2)}</b><span>Bubble-Faktor</span></div>
+      </div>
+      ${lehre}
+      <div class="hpgridwrap" style="margin-top:.6rem"><div class="hpgrid">${grid}</div></div>
+      <div class="hplegend">
+        <span><i style="background:var(--acc2)"></i>callen (${r.defend.pct.toFixed(1)}%)</span>
+        <span><i style="background:var(--warn)"></i>nur ohne ICM ein Call</span>
+        <span><i style="background:#1b2621"></i>folden</span>
+      </div>
+      <div class="hpnote-sm">${r.defend.shoverPct != null
+        ? 'Seine Shove-Range kommt aus derselben ICM-Rechnung mit ihm als Held.'
+        : 'Er deckt dich — als seine Shove-Range wird die eines gleich großen Stacks angesetzt.'}
+        Gerechnet mit ${SC_SIMS.toLocaleString('de-DE')} ICM-Simulationen; die Schwelle schwankt dadurch um
+        etwa einen Prozentpunkt. Nicht enthalten: Spieler hinter dir, die auch noch callen können — die
+        machen den echten Call nochmal enger.</div>
+      <div class="planactions" style="margin-top:.6rem"><button class="primary" id="scNext">Nächste Frage ▸</button></div>`;
+    $('#scNext').onclick = scNewQuestion;
+    scRenderScore();
   }
 
   /* ============================ RANGE-DESIGNER ====================== *
@@ -2281,7 +2624,7 @@
     if (v === 'session') renderSession();
     if (v === 'eigene') renderOwn();
     if (v === 'plan') renderPlan();
-    if (v === 'range' && !$('#rdOut').children.length) runRangeDesigner();
+    if (v === 'range' && !$('#rdOut').children.length) { runRangeDesigner(); scNewQuestion(); }
     if (v === 'rechnen' && !$('#mtOpts').children.length) { mtScore(); mtNew(); renderSizings(); }
     if (v === 'haende' && !$('#hpGrid').children.length) {
       renderHpGrid();
@@ -2294,6 +2637,7 @@
     S.cfg.tags = $$('.cfgTag:checked').map(e => e.value);
     S.cfg.multi = $('#cfgMultiStreet').checked;
     S.cfg.autoHint = $('#cfgAutoHint').checked;
+    S.cfg.quiz = $('#cfgQuiz').checked;
     S.cfg.profile = $('#cfgProfile').value || 'reg';
     if (!S.cfg.stacks.length) S.cfg.stacks = ['mid'];
     if (!S.cfg.tags.length) S.cfg.tags = ['SRP'];
@@ -2311,6 +2655,7 @@
     $$('.cfgTag').forEach(e => e.checked = S.cfg.tags.includes(e.value));
     $('#cfgMultiStreet').checked = S.cfg.multi;
     $('#cfgAutoHint').checked = S.cfg.autoHint;
+    $('#cfgQuiz').checked = S.cfg.quiz !== false;
     $('#cfgProfile').value = S.cfg.profile || 'reg';
   }
   function openSettings() { cfgToUI(); $('#settings').hidden = false; }
@@ -2383,6 +2728,7 @@
 
     /* --- Range-Designer --- */
     $('#rdRun').onclick = runRangeDesigner;
+    $('#scNew').onclick = scNewQuestion;
     const setRd = o => { for (const k in o) $(k).value = o[k]; runRangeDesigner(); };
     $('#rdBubbleNow').onclick = () => setRd({
       '#rdHero': 12, '#rdLeft': 100, '#rdBubble': 1, '#rdAvg': 25,

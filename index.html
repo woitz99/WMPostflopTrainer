@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 
-<link rel="stylesheet" href="css/style.css?v=36">
+<link rel="stylesheet" href="css/style.css?v=43">
 </head>
 <body>
 
@@ -116,6 +116,11 @@
       <ul class="reasons" id="fbReasons"></ul>
     </div>
 
+    <div class="panel wide" id="fbQuizPanel" hidden>
+      <h3>6 · Quiz — gleiche Stelle, andere Hand</h3>
+      <div id="fbQuiz"></div>
+    </div>
+
     <div class="navrow">
       <button class="primary" id="btnNext">Weiter ▸</button>
       <button class="ghost" id="btnSkip">Neue Hand ⟳</button>
@@ -184,6 +189,19 @@
       <button class="ghost" id="rdDeep">Früh im Turnier</button>
       <span class="muted" id="rdNote"></span>
     </div>
+  </section>
+  <section class="panel wide">
+    <h3>Trainer — callst du diesen Shove?</h3>
+    <p class="muted hpintro">Die andere Seite derselben Rechnung, und die teurere: beim Shoven
+      arbeitet der ICM-Druck für dich, weil die anderen folden müssen. Beim Callen gibt es keine
+      Fold-Equity — dann wirkt der ganze Druck gegen dich. Gefragt wird mit dem Feld, das du oben
+      eingestellt hast. Angenommen ist die Situation, die das Modell rechnet: ein Shorty shovt,
+      du sitzt hinter ihm und <b>nicht</b> in den Blinds, und hinter dir gibt niemand mehr Chips dazu.</p>
+    <div class="planactions">
+      <button class="primary" id="scNew">Neue Frage ▸</button>
+      <span class="muted" id="scScore"></span>
+    </div>
+    <div id="scOut"></div>
   </section>
   <div id="rdOut"></div>
 </main>
@@ -700,6 +718,7 @@
       <div class="setlabel">Straßen</div>
       <label><input type="checkbox" id="cfgMultiStreet" checked> Turn &amp; River weiterspielen (empfohlen)</label>
       <label><input type="checkbox" id="cfgAutoHint"> Board-/Range-Info schon bei der Frage zeigen (Lernmodus)</label>
+      <label><input type="checkbox" id="cfgQuiz" checked> Nach dem Feedback eine zweite Hand abfragen (Range-Training)</label>
     </div>
     <div class="modalrow">
       <button class="primary" id="btnCloseSettings">Übernehmen</button>
@@ -710,24 +729,24 @@
 </div>
 
 <!-- ?v= erhöhen, wenn du die JS-Dateien änderst und der Browser alte Versionen cacht -->
-<script src="js/engine.js?v=36"></script>
-<script src="js/review.js?v=36"></script>
-<script src="js/ranges.js?v=36"></script>
-<script src="js/strategy.js?v=36"></script>
-<script src="js/handprofile.js?v=36"></script>
-<script src="js/plan.js?v=36"></script>
-<script src="js/tips.js?v=36"></script>
-<script src="js/mental.js?v=36"></script>
-<script src="js/eqtable.js?v=36"></script>
-<script src="js/icm.js?v=36"></script>
-<script src="js/w2d.js?v=36"></script>
-<script src="js/w2dstats.js?v=36"></script>
-<script src="js/w2daudit.js?v=36"></script>
-<script src="js/multiway.js?v=36"></script>
-<script src="js/w2dleaks.js?v=36"></script>
-<script src="js/w2dpost.js?v=36"></script>
-<script src="js/ownhands.js?v=36"></script>
-<script src="js/app.js?v=36"></script>
+<script src="js/engine.js?v=43"></script>
+<script src="js/review.js?v=43"></script>
+<script src="js/ranges.js?v=43"></script>
+<script src="js/strategy.js?v=43"></script>
+<script src="js/handprofile.js?v=43"></script>
+<script src="js/plan.js?v=43"></script>
+<script src="js/tips.js?v=43"></script>
+<script src="js/mental.js?v=43"></script>
+<script src="js/eqtable.js?v=43"></script>
+<script src="js/icm.js?v=43"></script>
+<script src="js/w2d.js?v=43"></script>
+<script src="js/w2dstats.js?v=43"></script>
+<script src="js/w2daudit.js?v=43"></script>
+<script src="js/multiway.js?v=43"></script>
+<script src="js/w2dleaks.js?v=43"></script>
+<script src="js/w2dpost.js?v=43"></script>
+<script src="js/ownhands.js?v=43"></script>
+<script src="js/app.js?v=43"></script>
 
 <!-- Service Worker. Bewusst erst nach 'load': die Registrierung darf den
      ersten Start nicht verzoegern. Faellt sie aus (file://, kein HTTPS,

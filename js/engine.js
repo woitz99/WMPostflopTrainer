@@ -323,7 +323,17 @@ function classify(hole, board) {
       if (sc[u] === 4 && inHole >= 1) {
         const myTop = Math.max(...hole.filter(c => suitOf(c) === u).map(rankOf));
         hasFD = true;
-        hasNutFD = myTop === 12 || !all.some(c => suitOf(c) === u && rankOf(c) > myTop);
+        /* Nut-Flushdraw heißt: keine UNGESEHENE Karte dieser Farbe ist höher
+           als deine. Höhere Karten auf dem BOARD zählen nicht — die spielen
+           für alle mit; geschlagen wirst du nur von einer höheren Karte in
+           einer fremden Hand. Vorher lief die Prüfung gegen `all`, also gegen
+           die SICHTBAREN Karten. Damit galt jeder Draw als Nut-Draw, sobald
+           deine eigenen Karten die höchsten sichtbaren der Farbe waren. */
+        const seen = new Set(all);
+        hasNutFD = true;
+        for (let r = myTop + 1; r < 13; r++) {
+          if (!seen.has((r << 2) | u)) { hasNutFD = false; break; }
+        }
         draws.push(hasNutFD ? 'Nut-Flushdraw' : 'Flushdraw');
         break;
       }

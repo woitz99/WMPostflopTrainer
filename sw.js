@@ -30,7 +30,7 @@
    alten Stand.
    ========================================================================= */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = 'pokertrainer-' + CACHE_VERSION;
 
 /* Die komplette App. Reihenfolge egal, Vollständigkeit nicht:
