@@ -30,7 +30,7 @@
    alten Stand.
    ========================================================================= */
 
-const CACHE_VERSION = 'v13';
+const CACHE_VERSION = 'v19';
 const CACHE_NAME = 'pokertrainer-' + CACHE_VERSION;
 
 /* Die komplette App. Reihenfolge egal, Vollständigkeit nicht:
@@ -59,6 +59,10 @@ const PRECACHE = [
   'js/w2dpost.js',
   'js/ownhands.js',
   'js/riverdrill.js',
+  'js/stackoff.js',
+  'js/rangeflow.js',
+  'js/course.js',
+  'js/courseui.js',
   'js/app.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -99,6 +103,25 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET') return;
   // Fremde Hosts (Schriften, was auch immer) gehen uns nichts an.
   if (new URL(req.url).origin !== self.location.origin) return;
+
+  /* Der Index der Solver-Bibliothek wächst mit jedem Nachtlauf. Cache-first
+     würde für immer die erste Fassung liefern — deshalb hier zuerst das Netz,
+     offline der letzte Stand. Die Lösungen selbst ändern sich nie und
+     laufen über den normalen Cache-first-Weg unten. */
+  if (new URL(req.url).pathname.endsWith('/data/solver/index.json')) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      try {
+        const res = await fetch(req, { cache: 'no-store' });
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      } catch (e) {
+        return (await cache.match(req, { ignoreSearch: true }))
+          || new Response('{"spots":[]}', { headers: { 'Content-Type': 'application/json' } });
+      }
+    })());
+    return;
+  }
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);

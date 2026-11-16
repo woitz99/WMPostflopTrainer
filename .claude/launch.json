@@ -11,6 +11,14 @@
         "8138"
       ],
       "port": 8138
+    },
+    {
+      "name": "handlog",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/handlog/server.js"
+      ],
+      "port": 8139
     }
   ]
 }

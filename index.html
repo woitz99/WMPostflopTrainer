@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 
-<link rel="stylesheet" href="css/style.css?v=46">
+<link rel="stylesheet" href="css/style.css?v=49">
 </head>
 <body>
 
@@ -30,6 +30,7 @@
     <button class="tab" data-view="plan">Plan</button>
     <button class="tab" data-view="haende">Hände</button>
     <button class="tab" data-view="range">Range</button>
+    <button class="tab" data-view="verlauf">Verlauf</button>
     <button class="tab" data-view="rechnen">Rechnen</button>
     <button class="tab" data-view="session">Session</button>
     <button class="tab" data-view="eigene">Eigene Hände</button>
@@ -181,12 +182,15 @@
       <label>Davon Shorties <input id="rdShorts" type="number" value="10" min="0" max="200" step="1"></label>
       <label>Shorty-Stack (bb) <input id="rdShortBB" type="number" value="8" min="1" max="40" step="0.5"></label>
       <label>Spieler hinter dir <input id="rdBehind" type="number" value="4" min="1" max="8" step="1"></label>
+      <label>Auszahlung <select id="rdPay"><option value="mtt">Turnier (Auszahlungskurve)</option><option value="sat">Satellite (gleiche Tickets)</option></select></label>
     </div>
     <div class="planactions">
       <button class="primary" id="rdRun">Range berechnen ▸</button>
       <button class="ghost" id="rdBubbleNow">Bubble, andere sind kürzer</button>
       <button class="ghost" id="rdShortest">Bubble, du bist der Kürzeste</button>
       <button class="ghost" id="rdDeep">Früh im Turnier</button>
+      <button class="ghost" id="rdSatBubble">Satellite-Bubble</button>
+      <button class="ghost" id="rdSatEarly">Satellite früh</button>
       <span class="muted" id="rdNote"></span>
     </div>
   </section>
@@ -206,6 +210,9 @@
   <div id="rdOut"></div>
 </main>
 
+<!-- ============================ RANGE-VERLAUF ======================= -->
+<main id="view-verlauf" class="view"><div id="rfRoot"></div></main>
+
 <!-- ============================ RECHNEN ============================= -->
 <main id="view-rechnen" class="view">
   <section class="panel wide">
@@ -223,10 +230,24 @@
   </section>
 
   <section class="panel wide">
+    <h3>Hand-Check — deine eigenen All-in- und 3-Bet-Spots</h3>
+    <p class="muted hpintro">Sieben Hände aus deinen Sessions vom 26. und 27.10., mit den echten
+      Beträgen. Gefragt ist jedes Mal: <b>Welche schlechtere Hand bezahlt mich hier?</b> Gerechnet wird
+      gegen seine Range am Entscheidungspunkt; wie sie gesetzt ist, steht nach deiner Antwort dabei.
+      Bewertet wird gegen eine Calling Station — das ist dein eigener Read deiner Stakes —, das
+      Reg-Modell steht zum Vergleich daneben.</p>
+    <div class="planactions">
+      <button class="primary" id="soNew">Nächster Spot ▸</button>
+      <span class="muted" id="soScore"></span>
+    </div>
+    <div id="soOut"></div>
+  </section>
+
+  <section class="panel wide">
     <h3>Kopfrechnen — Pot Odds, MDF, Sizings</h3>
     <p class="muted hpintro">Online rechnet das Tool mit. Live hast du 30 Sekunden, kein HUD und
-      Jetons statt Prozente. Die Aufgaben kommen deshalb mit echten Chipbeträgen aus deiner
-      Turnierstruktur — 12.500 statt 100.</p>
+      Jetons statt Prozente. Die Aufgaben kommen deshalb mit echten Chipbeträgen — 12.500 statt 100.
+      Bis die Struktur der CAPT Million vorliegt, stammen die Level aus dem King's Million.</p>
     <div class="mtbar">
       <div class="mtscore"><b id="mtRight">0</b> von <b id="mtTotal">0</b> · <span id="mtPct">—</span>
         <span class="muted" id="mtStreak"></span></div>
@@ -253,7 +274,8 @@
   <section class="panel wide">
     <h3>Sizings in Chips</h3>
     <p class="muted" style="font-size:.88rem">Was ein 33-%-C-Bet auf diesem Level konkret bedeutet.
-      Open = 2,2× BB, Pot danach = Open × 2 + SB + Ante (heads-up gegen einen Caller).</p>
+      Open = 2,2× BB, Pot danach = Open × 2 + SB + Ante (heads-up gegen einen Caller).
+      Struktur: King's Million als Referenz — die CAPT-Struktur fehlt noch.</p>
     <label class="mtsel" style="max-width:220px">Tag
       <select id="szDay"><option value="1">Tag 1</option><option value="2">Tag 2</option><option value="3">Tag 3</option><option value="4">Tag 4</option></select>
     </label>
@@ -743,25 +765,29 @@
 </div>
 
 <!-- ?v= erhöhen, wenn du die JS-Dateien änderst und der Browser alte Versionen cacht -->
-<script src="js/engine.js?v=46"></script>
-<script src="js/review.js?v=46"></script>
-<script src="js/ranges.js?v=46"></script>
-<script src="js/strategy.js?v=46"></script>
-<script src="js/handprofile.js?v=46"></script>
-<script src="js/plan.js?v=46"></script>
-<script src="js/tips.js?v=46"></script>
-<script src="js/mental.js?v=46"></script>
-<script src="js/eqtable.js?v=46"></script>
-<script src="js/icm.js?v=46"></script>
-<script src="js/w2d.js?v=46"></script>
-<script src="js/w2dstats.js?v=46"></script>
-<script src="js/w2daudit.js?v=46"></script>
-<script src="js/multiway.js?v=46"></script>
-<script src="js/w2dleaks.js?v=46"></script>
-<script src="js/w2dpost.js?v=46"></script>
-<script src="js/ownhands.js?v=46"></script>
-<script src="js/riverdrill.js?v=46"></script>
-<script src="js/app.js?v=46"></script>
+<script src="js/engine.js?v=49"></script>
+<script src="js/review.js?v=49"></script>
+<script src="js/ranges.js?v=49"></script>
+<script src="js/strategy.js?v=49"></script>
+<script src="js/handprofile.js?v=49"></script>
+<script src="js/plan.js?v=49"></script>
+<script src="js/tips.js?v=49"></script>
+<script src="js/mental.js?v=49"></script>
+<script src="js/eqtable.js?v=49"></script>
+<script src="js/icm.js?v=49"></script>
+<script src="js/w2d.js?v=49"></script>
+<script src="js/w2dstats.js?v=49"></script>
+<script src="js/w2daudit.js?v=49"></script>
+<script src="js/multiway.js?v=49"></script>
+<script src="js/w2dleaks.js?v=49"></script>
+<script src="js/w2dpost.js?v=49"></script>
+<script src="js/ownhands.js?v=49"></script>
+<script src="js/riverdrill.js?v=49"></script>
+<script src="js/stackoff.js?v=49"></script>
+<script src="js/rangeflow.js?v=49"></script>
+<script src="js/course.js?v=49"></script>
+<script src="js/courseui.js?v=49"></script>
+<script src="js/app.js?v=49"></script>
 
 <!-- Service Worker. Bewusst erst nach 'load': die Registrierung darf den
      ersten Start nicht verzoegern. Faellt sie aus (file://, kein HTTPS,

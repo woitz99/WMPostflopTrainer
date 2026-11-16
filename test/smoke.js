@@ -2,7 +2,7 @@
 global.window = {};
 const fs = require('fs'), path = require('path');
 const base = path.join(__dirname, '..', 'js');
-for (const f of ['engine.js', 'review.js', 'ranges.js', 'strategy.js', 'handprofile.js', 'plan.js', 'tips.js', 'mental.js', 'eqtable.js', 'icm.js', 'multiway.js', 'w2d.js', 'w2dstats.js', 'w2daudit.js', 'w2dleaks.js', 'w2dpost.js', 'ownhands.js', 'riverdrill.js']) {
+for (const f of ['engine.js', 'review.js', 'ranges.js', 'strategy.js', 'handprofile.js', 'plan.js', 'tips.js', 'mental.js', 'eqtable.js', 'icm.js', 'multiway.js', 'w2d.js', 'w2dstats.js', 'w2daudit.js', 'w2dleaks.js', 'w2dpost.js', 'ownhands.js', 'riverdrill.js', 'stackoff.js', 'rangeflow.js', 'course.js', 'courseui.js']) {
   eval(fs.readFileSync(path.join(base, f), 'utf8'));
 }
 const P = global.window.PT;
@@ -137,12 +137,17 @@ console.log('\n== Spot-Vertrag (jeder Spot muss dieselben Felder anbieten) ==');
 console.log('\n== Merksaetze ==');
 {
   const T = P.Tips;
-  ok(!!T && T.TIPS.length === 49, `49 Merksaetze vorhanden (${T ? T.TIPS.length : 0})`);
+  const D = P.Plan.DAYS;
+  ok(!!T && T.TIPS.length === D, `ein Merksatz je Plantag (${T ? T.TIPS.length : 0} fuer ${D} Tage)`);
   ok(T.TIPS.every(t => t.k && t.d && t.d.length > 40), 'jeder Merksatz hat Titel und Inhalt');
-  ok(new Set(T.TIPS.map(t => t.k)).size === 49, 'keine doppelten Titel');
-  ok([1, 2, 3, 4, 5, 6, 7].every(w => T.tipsOfWeek(w).length === 7), 'sieben Merksaetze je Woche');
-  ok(T.tipFor(0) === T.TIPS[0] && T.tipFor(48) === T.TIPS[48], 'Tagesindex trifft den richtigen Satz');
-  ok(T.tipFor(49) === null, 'ueber das Planende hinaus kein Satz');
+  ok(new Set(T.TIPS.map(t => t.k)).size === D, 'keine doppelten Titel');
+  ok(P.Plan.WEEKS.every(w => T.tipsOfWeek(w.n).length === 7), 'sieben Merksaetze je Woche');
+  ok(T.tipFor(0) === T.TIPS[0] && T.tipFor(D - 1) === T.TIPS[D - 1], 'Tagesindex trifft den richtigen Satz');
+  ok(T.tipFor(D) === null, 'ueber das Planende hinaus kein Satz');
+  // Am Satellite-Tag steht die Re-Entry-Regel, und sie nennt dieselbe Grenze wie der Plan.
+  const satIdx = Math.round((P.Plan.toUTC('2026-11-10') - P.Plan.toUTC(P.Plan.PLAN_START)) / 86400000);
+  ok(/Re-Entry/.test(T.tipFor(satIdx).k), `Satellite-Tag zeigt die Re-Entry-Regel (${T.tipFor(satIdx).k})`);
+  ok(T.tipFor(satIdx).d.indexOf(String(P.Plan.REENTRY.maxBigBlind)) >= 0, 'Merksatz und Plan nennen dieselbe Big-Blind-Grenze');
   ok(T.TIPS.every(t => (t.d.match(/\*\*/g) || []).length % 2 === 0), 'Fettmarkierungen sind paarweise geschlossen');
 }
 
@@ -840,26 +845,35 @@ console.log('\n== Spaced Repetition (Leitner) ==');
 {
   const PL = P.Plan;
   console.log('\n== Plan: Zeitrechnung ==');
-  ok(PL.DAYS === 49, '49 Tage (sieben Wochen)');
-  ok(PL.WEEKS.length === 7 && PL.DAYS === PL.WEEKS.length * 7, '7 Wochen a 7 Tage decken den Plan genau ab');
-  ok(PL.dateOf(0) === PL.PLAN_START, `Tag 0 = Planstart (${PL.dateOf(0)})`);
-  ok(PL.dateOf(48) === '2026-09-29', `letzter Plantag = 29.09. (${PL.dateOf(48)}) — Tag vor dem Main Event`);
-  ok(PL.TARGET.start === '2026-09-30', 'Main Event startet 30.09.2026');
-  ok(PL.TARGET.festivalStart === '2026-09-16', 'Festival startet schon am 16.09.');
-  ok(PL.TARGET.gtd === 5000000 && PL.TARGET.buyIn === 1150, 'Main Event: €1.150 Buy-in, €5M GTD');
-  // Kein Tag darf doppelt vorkommen oder fehlen.
+  ok(PL.DAYS === 35, '35 Tage (fuenf Wochen)');
+  ok(PL.WEEKS.length === 5 && PL.DAYS === PL.WEEKS.length * 7, '5 Wochen a 7 Tage decken den Plan genau ab');
+  ok(PL.dateOf(0) === PL.PLAN_START && PL.PLAN_START === '2026-10-08', `Tag 0 = Planstart 08.10. (${PL.dateOf(0)})`);
+  ok(PL.dateOf(34) === '2026-11-11', `letzter Plantag = 11.11. (${PL.dateOf(34)}) — Tag nach dem Satellite`);
+  ok(PL.TARGET.start === '2026-11-14', 'Countdown zielt auf den Flight am 14.11.');
+  ok(PL.TARGET.gtd === 1000000 && PL.TARGET.buyIn === 550, 'CAPT Million: €550, €1M GTD');
+  // Wochentage aus casinos.at: Satellite ist ein "Dienstagsturnier", der Flight ein Samstag.
+  const dow = iso => new Date(PL.toUTC(iso)).getUTCDay();
+  ok(dow(PL.EVENTS[0].date) === 2, 'Satellite 10.11. ist ein Dienstag');
+  ok(dow(PL.EVENTS[1].date) === 6, 'Flight 14.11. ist ein Samstag');
+  ok(PL.EVENTS[0].stack === 18000, 'Satellite-Stack inklusive Gold Bonus (15.000 + 3.000)');
   const isos = []; for (let i = 0; i < PL.DAYS; i++) isos.push(PL.dateOf(i));
-  ok(new Set(isos).size === PL.DAYS, 'alle 35 Daten verschieden');
+  ok(new Set(isos).size === PL.DAYS, 'alle Daten verschieden');
+  // Im Plan liegt der 25.10. (Ende der Sommerzeit) — genau dort darf kein Tag doppelt oder verloren sein.
   ok(isos.every((d, i) => i === 0 || PL.toUTC(d) - PL.toUTC(isos[i - 1]) === 86400000),
-    'exakt ein Tag Abstand zwischen allen Eintraegen');
-  // Sommerzeit: der Plan selbst endet vor dem 25.10., aber daysUntilTarget
-  // rechnet bis 16.09. und dateOf muss ueber jede Zeitzone stabil sein.
-  ok(PL.dayIndex('2026-08-12T23:30:00') === 0, 'spaeter Abend am Starttag ist noch Tag 0');
-  ok(PL.dayIndex('2026-08-13T00:30:00') === 1, 'nach Mitternacht ist es Tag 1');
-  ok(PL.dayIndex('2026-08-11') === null && PL.dayIndex('2026-09-30') === null,
+    'exakt ein Tag Abstand zwischen allen Eintraegen, auch ueber den 25.10.');
+  ok(isos.includes('2026-10-25') && isos.includes('2026-10-26'), 'Sommerzeit-Wechsel liegt im Plan');
+  ok(PL.dayIndex('2026-10-08T23:30:00') === 0, 'spaeter Abend am Starttag ist noch Tag 0');
+  ok(PL.dayIndex('2026-10-09T00:30:00') === 1, 'nach Mitternacht ist es Tag 1');
+  ok(PL.dayIndex('2026-10-26T12:00:00') === 18, 'Tag nach der Zeitumstellung hat den richtigen Index');
+  ok(PL.dayIndex('2026-10-07') === null && PL.dayIndex('2026-11-12') === null,
     'ausserhalb des Zeitraums kein Tagesindex');
-  ok(PL.daysUntilTarget('2026-08-12') === 49, `49 Tage bis zum Main Event (${PL.daysUntilTarget('2026-08-12')})`);
-  ok(PL.daysUntilTarget('2026-09-29') === 1, 'am Vortag noch 1 Tag');
+  ok(PL.daysUntilTarget('2026-10-08') === 37, `37 Tage bis zum Flight (${PL.daysUntilTarget('2026-10-08')})`);
+  ok(PL.daysUntil(PL.EVENTS[0].date, '2026-10-08') === 33, '33 Tage bis zum Satellite');
+
+  console.log('\n== Plan: Re-Entry-Regel ==');
+  const R = PL.REENTRY;
+  ok(R.maxBigBlind === 720, `25bb mit 18.000 Chips = Big Blind 720 (${R.maxBigBlind})`);
+  ok(Math.abs(R.rakeSat - 1 / 6) < 1e-9 && Math.abs(R.rakeMain - 1 / 11) < 1e-9, 'Rake 16,7 % im Satellite, 9,1 % im Flight');
 
   console.log('\n== Plan: Einheiten ==');
   const seen = {};
@@ -873,38 +887,31 @@ console.log('\n== Spaced Repetition (Leitner) ==');
   }
   ok(true, 'alle 35 Einheiten sind vollstaendig und nennen gueltige Handklassen');
   ok(Object.keys(seen).length >= 5, `mehrere Tagesformen im Einsatz (${Object.keys(seen).join(', ')})`);
-  ok(PL.sessionFor(0, []).week.n === 1 && PL.sessionFor(48, []).week.n === 7, 'Woche 1 am Anfang, Woche 7 am Ende');
-  // Der Aufbau muss die Didaktik abbilden: geblockt -> gemischt, Lernmodus an -> aus.
-  ok(PL.WEEKS[0].cfg.tags.length === 1, 'Woche 1 ist geblockt (nur ein Spot-Typ)');
-  ok(PL.WEEKS[0].cfg.autoHint === true && PL.WEEKS[1].cfg.autoHint === false, 'Lernmodus geht ab Woche 2 aus');
-  // Absicht statt Zahl: ab Woche 3 wird interleaved, und Mehrweg gehoert dazu
-  // (am Live-Tisch der Normalfall). Eine feste Anzahl waere bei jedem neuen
-  // Spot-Typ wieder falsch.
-  ok(PL.WEEKS[2].cfg.tags.length >= 4, `ab Woche 3 gemischt (${PL.WEEKS[2].cfg.tags.length} Spot-Typen)`);
-  ok(PL.WEEKS[2].cfg.tags.includes('MW'), 'Mehrweg ab Woche 3 im Training');
-  ok(PL.WEEKS[6].cfg.tags.includes('MW'), 'Mehrweg auch in der Abschlusswoche');
-  ok(PL.WEEKS[3].cfg.stacks.join() === 'push,short', 'Woche 4 nur kurze Stacks inkl. Push/Fold-Zone');
+  ok(seen.event === 1, 'genau ein Turniertag im Plan (der Satellite)');
+  const satDay = PL.sessionFor(33, []);
+  ok(satDay.iso === '2026-11-10' && satDay.event && satDay.event.key === 'sat' && satDay.type.key === 'event',
+    'am 10.11. ersetzt der Satellite-Tag die normale Tagesform');
+  ok(satDay.type.blocks.some(b => b[1].indexOf('720') >= 0), 'Satellite-Tag nennt die Re-Entry-Grenze');
+  ok(PL.sessionFor(0, []).week.n === 1 && PL.sessionFor(34, []).week.n === 5, 'Woche 1 am Anfang, Woche 5 am Ende');
+  // Schnelle Level: der Plan beginnt unter 20bb, nicht mit tiefen Stacks.
+  ok(PL.WEEKS[0].cfg.stacks.join() === 'push', 'Woche 1 nur Push/Fold-Band');
+  ok(PL.WEEKS.slice(0, 4).every(w => !w.cfg.stacks.includes('deep')), 'bis zur Generalprobe keine tiefen Stacks');
+  ok(PL.WEEKS[1].cfg.tags.includes('MW') && PL.WEEKS[4].cfg.tags.includes('MW'), 'Mehrweg im Live-Feld und in der Generalprobe');
+  ok(PL.WEEKS[2].tool === 'range' && PL.WEEKS[3].tool === 'range', 'Woche 3 und 4 nutzen den Range-Designer');
+  ok(/Satellite/.test(PL.WEEKS[3].title), 'Woche 4 ist die Satellite-Woche');
+  ok(PL.WEEKS[4].cfg.profile === 'mix', 'Generalprobe mit gemischten Gegnertypen');
   ok(P.STACKS.push && P.STACKS.push.bb < 20, `Push/Fold-Band existiert (${P.STACKS.push.label})`);
-  // Bei 12-20bb muss der SPR so klein sein, dass eine Bet committet.
   ok(P.geometry(P.SPOTS[0], 'push').spr < 3, `SRP bei 16bb hat SPR ${P.geometry(P.SPOTS[0], 'push').spr}`);
-  ok(P.geometry(P.SPOTS.find(s => s.potType === '3BP'), 'push').spr < 1.5,
-    `3-Bet-Pot bei 16bb ist praktisch commited (SPR ${P.geometry(P.SPOTS.find(s => s.potType === '3BP'), 'push').spr})`);
   ok(P.adjustForStack(P.RFI.BTN, 'push').length < P.RFI.BTN.length, 'Push-Band strafft die Ranges wie short');
-  ok(PL.WEEKS[6].cfg.profile === 'mix', 'Woche 7 mit gemischten Gegnertypen');
-  ok(PL.WEEKS[4].tool === 'range' && PL.WEEKS[5].tool === 'rechnen',
-    'Woche 5 nutzt den Range-Designer, Woche 6 das Kopfrechnen');
   // Jede Wochen-Konfiguration muss in die echten Einstellungen passen.
-  // Aus der Spot-Bibliothek ableiten, nicht duplizieren — eine zweite,
-  // handgepflegte Liste laeuft sonst irgendwann auseinander.
   const VALID_TAGS = [...new Set(P.SPOTS.map(s => s.tag))], VALID_STACKS = Object.keys(P.STACKS);
   ok(PL.WEEKS.every(w => w.cfg.tags.every(t => VALID_TAGS.includes(t))), 'nur existierende Spot-Typen');
   ok(PL.WEEKS.every(w => w.cfg.stacks.every(s => VALID_STACKS.includes(s))), 'nur existierende Stackbaender');
   ok(PL.WEEKS.every(w => P.PROFILES[w.cfg.profile] || w.cfg.profile === 'mix'), 'nur existierende Gegnertypen');
-  // Jede Woche muss auch wirklich Spots liefern, sonst laeuft der Drill leer.
   ok(PL.WEEKS.every(w => P.SPOTS.some(s => w.cfg.tags.includes(s.tag))), 'jede Woche hat spielbare Spots');
 
-  console.log('\n== Plan: Woche 5 zieht die eigenen Fehler ==');
-  ok(PL.WEEKS[6].hands === null, 'Woche 7 hat keine feste Handliste');
+  console.log('\n== Plan: Generalprobe zieht die eigenen Fehler ==');
+  ok(PL.WEEKS[4].hands === null, 'Woche 5 hat keine feste Handliste');
   const byHand = {
     'AKo': { pts: 3, max: 30 }, 'A5s': { pts: 20, max: 30 }, '72o': { pts: 1, max: 12 },
     'QQ': { pts: 29, max: 30 }, 'J4o': { pts: 5, max: 6 }
@@ -914,17 +921,43 @@ console.log('\n== Spaced Repetition (Leitner) ==');
   ok(w[1] === 'AKo', 'zweitschlechteste danach');
   ok(!w.includes('J4o'), 'Haende mit zu wenig Entscheidungen fliegen raus');
   ok(w.indexOf('QQ') === w.length - 1, 'die beste Hand steht hinten');
-  ok(PL.sessionFor(44, w).hands.every(h => w.includes(h)), 'Woche 7 nutzt genau diese Haende');
-  ok(PL.sessionFor(44, []).hands.length === 2, 'ohne Statistik faellt Woche 7 auf Standardhaende zurueck');
-  // Bei kurzer Fehlerliste darf nicht zweimal dieselbe Hand am selben Tag stehen.
-  for (let i = 42; i < 49; i++) {
-    const h = PL.sessionFor(i, ['AQo']).hands;
-    if (h[0] === h[1]) { ok(false, `Tag ${i} nennt zweimal ${h[0]}`); break; }
-  }
-  ok([42, 43, 44, 45, 46, 47, 48].every(i => {
+  ok(PL.sessionFor(30, w).hands.every(h => w.includes(h)), 'Woche 5 nutzt genau diese Haende');
+  ok(PL.sessionFor(30, []).hands.length === 2, 'ohne Statistik faellt Woche 5 auf Standardhaende zurueck');
+  ok([28, 29, 30, 31, 32, 33, 34].every(i => {
     const h = PL.sessionFor(i, ['AQo']).hands; return h[0] !== h[1];
   }), 'kurze Fehlerliste wird aufgefuellt statt Haende zu doppeln');
-  ok(PL.sessionFor(42, ['AQo']).hands.includes('AQo'), 'die eigene Fehlerhand steht trotzdem vorne');
+  ok(PL.sessionFor(28, ['AQo']).hands.includes('AQo'), 'die eigene Fehlerhand steht trotzdem vorne');
+}
+
+/* ===================== Satellite-ICM ===================== */
+{
+  const I = P.ICM;
+  console.log('\n== ICM: Satellite mit gleichen Tickets ==');
+  const fp = I.flatPayoutsForField(7, 5);
+  ok(fp.length === 7 && fp.slice(0, 5).every(x => Math.abs(x - 0.2) < 1e-12) && fp[5] === 0 && fp[6] === 0,
+    '5 Tickets bei 7 Spielern: fuenfmal 20 %, zweimal nichts');
+  // Die Faelle aus den Merksaetzen der Woche 4 (js/tips.js) und den Satellite-Presets.
+  const bub = { left: 12, paid: 10, bubble: 2, heroBB: 15, avgBB: 12, shortCount: 2, shortBB: 5, behind: 3 };
+  const mtt = I.pushFoldICM(Object.assign({}, bub, { sat: false }));
+  const sat = I.pushFoldICM(Object.assign({}, bub, { sat: true }));
+  ok(sat.metrics.bubbleFactor > 3 * mtt.metrics.bubbleFactor,
+    `Satellite-Bubble viel haerter (BF ${sat.metrics.bubbleFactor.toFixed(1)} statt ${mtt.metrics.bubbleFactor.toFixed(1)})`);
+  ok(Math.abs(sat.defend.pct - 13) < 3 && Math.abs(mtt.defend.pct - 31) < 3,
+    `Call gegen 5bb-Shove: ~13 % statt ~31 % (${sat.defend.pct.toFixed(1)} / ${mtt.defend.pct.toFixed(1)})`);
+  ok(sat.metrics.needFlip > 0.9, `ein Flip braucht ueber 90 % (${(sat.metrics.needFlip * 100).toFixed(1)})`);
+  ok(Math.abs(sat.minCash - 0.1) < 1e-12 && sat.firstPrize === sat.minCash, 'Platz 1 = letzter Ticketplatz');
+  // Weit weg von der Bubble darf der Satellite kaum etwas aendern.
+  const far = { left: 30, paid: 5, bubble: 25, heroBB: 12, avgBB: 12, shortCount: 5, shortBB: 6, behind: 3 };
+  const fM = I.pushFoldICM(Object.assign({}, far, { sat: false, sims: 20000 }));
+  const fS = I.pushFoldICM(Object.assign({}, far, { sat: true, sims: 20000 }));
+  ok(Math.abs(fS.defend.pct - fM.defend.pct) < 4,
+    `weit vor der Bubble fast gleich (${fS.defend.pct.toFixed(1)} vs ${fM.defend.pct.toFixed(1)})`);
+  // Die Presets in app.js muessen genau diese Faelle setzen.
+  const appSrc = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+  ok(/'#rdHero': 15, '#rdLeft': 12, '#rdBubble': 2, '#rdAvg': 12,\s*'#rdShorts': 2, '#rdShortBB': 5, '#rdBehind': 3, '#rdPay': 'sat'/.test(appSrc),
+    'Preset "Satellite-Bubble" entspricht dem Fall aus den Merksaetzen');
+  const htmlSrc = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  ok(htmlSrc.indexOf('id="rdPay"') >= 0 && htmlSrc.indexOf('id="rdSatBubble"') >= 0, 'Auszahlungs-Auswahl und Preset in index.html');
 }
 
 /* ===================== ICM & Range-Designer ===================== */
@@ -1133,6 +1166,30 @@ console.log('\n== Spaced Repetition (Leitner) ==');
   ok(ST.wilson(0, 0).n === 0, 'leere Stichprobe stuerzt nicht ab');
   const wide = ST.wilson(5, 20), narrow = ST.wilson(50, 200);
   ok((wide.hi - wide.lo) > (narrow.hi - narrow.lo), 'mehr Haende -> engeres Intervall');
+
+  console.log('\n== win2day: Raise steht als Betrag AUF im XML ==');
+  {
+    // Synthetisch, Muster aus einer echten Twister-Hand: SB raist aus dem
+    // Blind, Held raist zweimal in derselben Straße, dann All-in (Typ 7 =
+    // Zusatzbetrag). Nur mit "Raise = auf" geht der Pot auf die Gewinne auf.
+    const xml = '<session sessioncode="9"><general><nickname>H</nickname></general>' +
+      '<game gamecode="1"><general><startdate>2026-01-01 20:00:00</startdate><smallblind>10</smallblind><bigblind>20</bigblind><ante>0</ante><players>' +
+      '<player bet="530" chips="530" dealer="0" name="A" reg_code="" seat="3" win="0"/>' +
+      '<player bet="20" chips="530" dealer="0" name="B" reg_code="" seat="6" win="0"/>' +
+      '<player bet="440" chips="440" dealer="1" name="H" reg_code="9" seat="10" win="900"/>' +
+      '</players></general><round no="0"><action no="1" player="A" sum="10" type="1"/><action no="2" player="B" sum="20" type="2"/></round>' +
+      '<round no="1"><cards player="H" type="Pocket">SA HA</cards><action no="3" player="H" sum="40" type="23"/>' +
+      '<action no="4" player="A" sum="60" type="23"/><action no="5" player="B" sum="0" type="0"/>' +
+      '<action no="6" player="H" sum="140" type="23"/><action no="7" player="A" sum="530" type="23"/>' +
+      '<action no="8" player="H" sum="300" type="7"/></round></game></session>';
+    const h = W.parseSession(xml).hands[0];
+    ok(h.invested.H === 440, `Held investiert genau seinen Stack (${h.invested.H})`);
+    ok(h.invested.A === 530, `SB-Raise aus dem Blind zaehlt den Blind nicht doppelt (${h.invested.A})`);
+    const re = h.streets.preflop.filter(a => a.player === 'H' && a.kind === 'raise');
+    ok(re[1].amount === 100 && re[1].to === 140, 'zweiter Raise: Zusatz 100, auf 140');
+    const pot = Object.values(h.invested).reduce((a, b) => a + b, 0) - 90; // 90 = ungecallter Rest von A
+    ok(pot === 900, `Pot geht auf den Gewinn auf (${pot})`);
+  }
 
   const sampleFile = path.join(__dirname, '..', 'Samples', '4192312021.xml');
   if (!fs.existsSync(sampleFile)) {
@@ -1621,6 +1678,186 @@ console.log('\n== River-Filter (Drill) ==');
   let leer = 0;
   for (let i = 0; i < 40; i++) if (!RD.make('deep')) leer++;
   ok(leer === 0, `make() faellt nicht sporadisch auf null (${leer} Ausfaelle)`);
+}
+
+console.log('\n== Hand-Check (eigene Spots) ==');
+{
+  const SO = P.StackOff;
+  ok(SO.SPOTS.length === 7, 'sieben Spots aus den Sessions 26./27.10.');
+  ok(new Set(SO.SPOTS.map(s => s.id)).size === SO.SPOTS.length, 'Spot-IDs eindeutig');
+  ok(SO.SPOTS.every(s => P.validateRange(s.villRange).length === 0 && (!s.callRange || P.validateRange(s.callRange).length === 0)),
+    'alle Range-Strings lesbar');
+  let maxOk = 0, foldNull = 0;
+  const res = {};
+  for (const s of SO.SPOTS) {
+    const a = SO.analyse(s, 'station');
+    res[s.id] = a;
+    if (a.liste.every(o => o.ev <= a.best.ev + 1e-9)) maxOk++;
+    if (!s.options.includes('FOLD') || a.evs.FOLD === 0) foldNull++;
+  }
+  ok(maxOk === SO.SPOTS.length, 'best ist jeweils die Option mit dem höchsten EV');
+  ok(foldNull === SO.SPOTS.length, 'EV(Fold) ist 0');
+  const k7 = res.k7s_midpair_jam;
+  ok(k7.callAnteil === 1, 'K7s: er muss nur noch 6,5bb in 32bb nachlegen — committed, callt alles');
+  ok(Math.abs(k7.A - (5.62 + 6.54)) < 1e-9, 'All-in-Betrag ist durch seinen Stack begrenzt');
+  const jto = res.jto_bb_vs_3bet;
+  ok(Math.abs(jto.callNoetig - 4.2 / 14.0) < 1e-9, 'JTo: Pot Odds = Call / (Pot + Call) = 30%');
+  ok(jto.best.key === 'FOLD', 'JTo im BB gegen Open + 3-Bet: Fold ist die beste Option');
+  ok(res.qjs_vs_min3bet.best.key === 'CALL', 'QJs gegen Min-3-Bet: Call ist die beste Option (20% Pot Odds)');
+}
+
+console.log('\n== Range-Verlauf ==');
+{
+  const RF = P.RangeFlow;
+  // Linien folgen der Preflop-Reihenfolge: wer zuerst raist, sitzt vorne.
+  ok(RF.linesFor('BB', 'BTN').join() === 'vOpen_hCall,vOpen_h3b', 'BB gegen BTN: nur er kann öffnen');
+  ok(RF.linesFor('BTN', 'BB').join() === 'hOpen_vCall,hOpen_v3b', 'BTN gegen BB: nur du kannst öffnen');
+  ok(RF.linesFor('BB', 'BB').length === 0, 'gleiche Position: keine Linie');
+  ok(RF.villIP('BB', 'BTN') === true && RF.villIP('BTN', 'BB') === false, 'Position postflop richtig');
+  ok(RF.villIP('CO', 'EP') === false, 'EP handelt postflop vor CO (EP/UTG-Abbildung)');
+
+  // Hinterlegte Ranges werden exakt genommen, fehlende angenähert oder leer gemeldet.
+  const a = RF.preflopRanges('vOpen_hCall', 'BB', 'BTN', 'mid');
+  ok(a.vill.str === P.RFI.BTN && !a.vill.approx, 'BTN-Open = RFI.BTN');
+  ok(a.hero.str === P.BB_FLAT.BTN, 'deine BB-Defense = BB_FLAT.BTN');
+  const b = RF.preflopRanges('hOpen_vCall', 'MP', 'CO', 'mid');
+  ok(b.vill.approx && b.vill.src.includes('CO_vs_EP'), 'CO-Call gegen MP: angenähert über CO_vs_EP und so markiert');
+  const c = RF.preflopRanges('hOpen_vCall', 'EP', 'MP', 'mid');
+  ok(c.vill === null, 'MP-Cold-Call gegen EP: nichts hinterlegt -> null statt erfundener Range');
+  const d = RF.preflopRanges('vOpen_hCall', 'BB', 'BTN', 'short');
+  ok(!d.vill.str.includes('43s'), 'Stackband short schneidet Randhände (adjustForStack)');
+
+  // Flop: Aktionen verengen, ohne die Range zu verlieren; Karten werden entfernt.
+  P.seedRng(7);
+  const vr = P.parseRange(P.RFI.BTN), hr = P.parseRange(P.BB_FLAT.BTN);
+  const board = C('Kh7d2c'), hero = C('AhKd');
+  const base = { dead: hero, villIP: true, villRole: 'PFR', potType: 'SRP', band: 'mid', profile: P.PROFILES.reg, betPct: 0.33 };
+  const W = r => r.reduce((x, y) => x + y.w, 0);
+  const bet = RF.flopNarrow(vr, hr, board, Object.assign({ action: 'b' }, base));
+  const chk = RF.flopNarrow(vr, hr, board, Object.assign({ action: 'x' }, base));
+  ok(bet.range.length > 0 && chk.range.length > 0, 'Bet- und Check-Range nicht leer');
+  ok(!bet.range.some(x => hero.includes(x.c[0]) || hero.includes(x.c[1]) || board.includes(x.c[0]) || board.includes(x.c[1])),
+    'deine Karten und das Board sind aus seiner Range raus');
+  const A0 = RF.analyse(vr, board, hero), Ab = RF.analyse(bet.range, board, hero), Ax = RF.analyse(chk.range, board, hero);
+  const sh = (A, k) => A.groups[k].w / A.tot;
+  ok(sh(Ab, 'strong') > sh(A0, 'strong') && sh(Ax, 'strong') < sh(A0, 'strong'), 'Bet-Range stärker, Check-Range schwächer als die Ausgangsrange');
+  const sumG = Object.values(Ab.groups).reduce((x, g) => x + g.w, 0);
+  ok(Math.abs(sumG - Ab.tot) < 1e-6, 'Gruppen summieren sich zur ganzen Range');
+  const nit = RF.flopNarrow(vr, hr, board, Object.assign({}, base, { action: 'b', profile: P.PROFILES.nit }));
+  ok(sh(RF.analyse(nit.range, board, hero), 'air') < sh(Ab, 'air'), 'Nit hat weniger Luft in der Bet-Range als ein Reg');
+  // Abgleich mit Desktop Postflop (16.11.2026): BB-Caller donkt auf Q84 zwei Farben 0,7 %,
+  // der BTN c-bettet deutlich öfter. Das Modell muss wenigstens die Richtung treffen.
+  {
+    const b2 = C('Qs8h4h');
+    const take = (rng, opp, o) => {
+      const base0 = W(rng.filter(x => !b2.includes(x.c[0]) && !b2.includes(x.c[1])));
+      return W(RF.flopNarrow(rng, opp, b2, Object.assign({ dead: [], potType: 'SRP', band: 'mid', profile: P.PROFILES.reg, action: 'b', betPct: 0.33 }, o)).range) / base0;
+    };
+    const donk = take(hr, vr, { villIP: false, villRole: 'CALLER' });
+    const cbet = take(vr, hr, { villIP: true, villRole: 'PFR' });
+    ok(donk < 0.15, 'BB donkt auf Q84 selten (' + (donk * 100).toFixed(1) + ' %, Solver 0,7 %)');
+    ok(cbet > 3 * donk, 'BTN bettet nach Check viel öfter als der BB donkt (' + (cbet * 100).toFixed(1) + ' %)');
+    const chk2 = RF.flopNarrow(hr, vr, b2, { dead: [], potType: 'SRP', band: 'mid', profile: P.PROFILES.reg, action: 'x', villIP: false, villRole: 'CALLER' });
+    ok(Math.abs(donk + W(chk2.range) / W(hr.filter(x => !b2.includes(x.c[0]) && !b2.includes(x.c[1]))) - 1) < 0.02, 'Bet + Check ≈ ganze Range (narrow verwirft Anteile unter 2 %)');
+  }
+  const xc = RF.flopNarrow(vr, hr, board, Object.assign({}, base, { villIP: false, villRole: 'CALLER', action: 'xc' }));
+  const xo = RF.flopNarrow(vr, hr, board, Object.assign({}, base, { villIP: false, villRole: 'CALLER', action: 'x' }));
+  ok(W(xc.range) < W(xo.range), 'Check-Call ist enger als nur Check');
+  ok(RF.parseCards('AhAh').error && RF.parseCards('Xx').error && RF.parseCards('ah kd').cards.length === 2,
+    'Karten-Eingabe: Dubletten und Unsinn werden gemeldet');
+
+  // Solver-Export: jede Klasse einzeln, Teilgewichte als :w, zurückgelesen dieselbe Range.
+  const ex1 = RF.solverRangeStr(P.parseRange('AA, AKs, KQo, 22:0.5'));
+  ok(ex1 === 'AA,AKs,KQo,22:0.5', 'Export-Format: ' + ex1);
+  const back = P.parseRange(RF.solverRangeStr(vr));
+  ok(back.length === vr.length && Math.abs(W(back) - W(vr)) < 1e-6, 'Export der BTN-Range liest sich verlustfrei zurück');
+  const ex2 = RF.solverExport({ villRange: vr, heroRange: hr, board, villIP: true, heroPos: 'BB', villPos: 'BTN', potType: 'SRP', band: 'mid' });
+  ok(ex2.oop === RF.solverRangeStr(hr) && ex2.ip === RF.solverRangeStr(vr), 'BB ist OOP, BTN ist IP');
+  const g2 = P.geometry({ potType: 'SRP', opponents: 1, id: '' }, 'mid');
+  ok(ex2.board === 'Kh 7d 2c', 'Board mit Leerzeichen (WASM Postflop trennt nur daran)');
+  ok(ex2.pot === g2.pot && /^\d+$/.test(ex2.potChips) && /^\d+$/.test(ex2.effChips)
+    && +ex2.potChips === Math.round(g2.pot * 10), 'Pot/Stack als ganze Zahlen in Zehntel-bb');
+
+  // Import-Dateien: dieselben Prüfungen wie checkJson/loadConfig in Desktop Postflop.
+  const fr = ex2.files.ranges, fc = ex2.files.configurations;
+  ok(fr.version === 2 && fr.name === 'ranges' && fc.version === 2 && fc.name === 'configurations', 'version 2 und exakte Store-Namen');
+  const pathsOk = f => f.data.every((it, i) => it.path.length >= 1 && it.path.every(p => typeof p === 'string' && p.trim())
+    && (it.path.length === 1 || f.data.slice(0, i).some(g => g.isGroup && g.path.join('/') === it.path.slice(0, -1).join('/'))));
+  ok(pathsOk(fr) && pathsOk(fc), 'Pfade nicht leer, jede Gruppe steht vor ihren Einträgen');
+  ok(fr.data.filter(x => !x.isGroup).every(x => typeof x.value === 'string')
+    && fr.data[1].value === ex2.oop && fr.data[2].value === ex2.ip, 'Ranges als Strings, OOP und IP richtig');
+  // Rate-Modus: Abweichung in Prozentpunkten, fehlende Schätzungen zählen nicht.
+  const qs = RF.quizScore({ take: 40, value: 30, draws: 20, rest: 50 }, { take: 35, value: 45, draws: 20, rest: 35, eq: 60 });
+  ok(qs.n === 4 && Math.abs(qs.meanAbs - (5 + 15 + 0 + 15) / 4) < 1e-9, 'Mittel der Beträge über geschätzte Felder, Equity ohne Schätzung ignoriert');
+  ok(qs.worst.key === 'value' && qs.worst.diff === -15 && qs.rating.label === 'Gut', 'größte Abweichung und Bewertung (8,75 → Gut)');
+  ok(RF.quizScore({}, { take: 10 }).meanAbs === null, 'ohne Schätzung keine Bewertung');
+  ok(RF.quizScore({ take: 0 }, { take: 30 }).rating.label === 'Weit daneben', 'Schätzung 0 zählt als Schätzung');
+  // Solver-Bibliothek: Zuordnung Spot -> Eintrag und Range aus Strategien.
+  {
+    const idx = { spots: [{ id: 'btn_bb__Qs8h4h', oopPos: 'BB', ipPos: 'BTN', openerPos: 'BTN', potType: 'SRP', band: 'mid', board: 'Qs8h4h' }] };
+    const q84 = C('4hQs8h');
+    ok(RF.solverEntryFor(idx, { heroPos: 'BB', villPos: 'BTN', line: 'vOpen_hCall', band: 'mid', board: q84 }), 'Eintrag gefunden (Board-Reihenfolge egal)');
+    ok(RF.solverEntryFor(idx, { heroPos: 'BTN', villPos: 'BB', line: 'hOpen_vCall', band: 'mid', board: q84 }), 'auch aus Sicht des BTN');
+    ok(!RF.solverEntryFor(idx, { heroPos: 'BB', villPos: 'BTN', line: 'vOpen_h3b', band: 'mid', board: q84 }), 'nicht im 3-Bet-Pot');
+    ok(!RF.solverEntryFor(idx, { heroPos: 'BB', villPos: 'BTN', line: 'vOpen_hCall', band: 'deep', board: q84 }), 'nicht in anderem Stackband');
+    // Mini-Lösung: zwei Hände je Spieler, Pot 60. OOP: X/B20/B48. IP nach Check: X/B20. OOP gg B20: F/C/R54.
+    const d = {
+      pot: 60, oop: { cards: ['AhAd', '7c6c'] }, ip: { cards: ['KcKd', '3c2c'] },
+      nodes: {
+        '': { p: 0, a: ['X', 'B20', 'B48'], s: [[1000, 200], [0, 300], [0, 500]] },
+        '0': { p: 1, a: ['X', 'B20'], s: [[400, 100], [600, 900]] },
+        '0-1': { p: 0, a: ['F', 'C', 'R54'], s: [[0, 700], [300, 300], [700, 0]] },
+        '1': { p: 1, a: ['F', 'C', 'R54'], s: [[0, 1000], [1000, 0], [0, 0]] }
+      }
+    };
+    const rOOP = P.parseRange('AA, 76s'), rIP = P.parseRange('KK, 32s');
+    const W2 = r => r.reduce((a, x) => a + x.w, 0);
+    const wOf = (r, s) => { const c = C(s); const x = r.find(y => (y.c[0] === c[0] && y.c[1] === c[1]) || (y.c[0] === c[1] && y.c[1] === c[0])); return x ? x.w : 0; };
+    const brd = C('Js5h4d');
+    const donk = RF.solverNarrow(d, rOOP, brd, { villIsOop: true, action: 'b', betPct: 0.8 });
+    ok(donk.used === 80 && wOf(donk.range, '7c6c') === 0.5 && wOf(donk.range, 'AhAd') === 0, 'OOP-Bet 80 %: nächste Größe B48, Häufigkeit je Hand');
+    const xr = RF.solverNarrow(d, rOOP, brd, { villIsOop: true, action: 'xr', betPct: 0.33 });
+    ok(Math.abs(wOf(xr.range, 'AhAd') - 0.7) < 1e-9 && wOf(xr.range, '7c6c') === 0, 'Check-Raise = Check × Raise gegen die IP-Bet');
+    const stab = RF.solverNarrow(d, rIP, brd, { villIsOop: false, action: 'b', betPct: 0.55 });
+    ok(Math.abs(wOf(stab.range, '3c2c') - 0.9) < 1e-9 && /nächstliegende, 33 %/.test(stab.sizeNote), 'IP-Bet nach Check, Größenhinweis bei 55 % → 33 %');
+    const call = RF.solverNarrow(d, rIP, brd, { villIsOop: false, action: 'c', betPct: 0.33 });
+    ok(wOf(call.range, 'KcKd') === 1 && wOf(call.range, '3c2c') === 0 && W2(call.range) === 1, 'IP-Call gegen B20');
+    ok(RF.solverNarrow(d, rIP, brd, { villIsOop: false, action: 'c', betPct: 0.33, dead: C('Kc2d') }).range.length === 0, 'deine Karten werden entfernt');
+  }
+  // Kurs (js/course.js)
+  {
+    const K = P.Course;
+    ok(K.UNITS.length === 15 && new Set(K.UNITS.map(u => u.id)).size === 15, 'Block 1: 15 Einheiten, eindeutige IDs');
+    const dows = K.UNITS.map((u, k) => new Date(K.plannedDate(k) + 'T00:00:00Z').getUTCDay());
+    ok(dows.every(d => d >= 1 && d <= 5) && K.plannedDate(0) === '2026-11-16' && K.plannedDate(5) === '2026-11-23', 'Einheiten Mo–Fr ab 16.11.');
+    ok(K.UNITS.every(u => u.tasks.reduce((a, t) => a + t.min, 0) <= 60), 'keine Einheit über 60 Minuten Aufträge');
+    // Beispiel der Einheit 1: A7o gegen eine 4×-3-Bet ist ein klarer Fold — auch mit 90 % Realisierung.
+    const ex1 = K.solve(K.UNITS[0].example());
+    ok(ex1.best.key === 'FOLD' && ex1.robust, 'A7o gegen 4×-3-Bet: Fold, robust');
+    // Robust heißt: bei 90 % und 75 % dieselbe beste Antwort.
+    let seed = 3; const rr = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    let okAll = true, opts = new Set();
+    for (const u of K.UNITS.slice(0, 3)) for (const g of u.quiz.gens) {
+      const q = g(rr);
+      if (q.kind === 'ev') { const a = K.solve(q); opts.add(a.best.key); if (!q.borderline && !a.robust) okAll = false; if (!(q.pot > 0 && q.toCall > 0 && q.heroBehind > q.toCall)) okAll = false; }
+    }
+    ok(okAll, 'Fragen der Einheiten 1–3: plausible Geometrie, robust oder als Grenzfall markiert');
+    const oq = K.openQuestion({ positions: ['EP'], band: 'mid' }, rr);
+    ok(oq.answer === (P.parseRange(P.adjustForStack(P.RFI.EP, 'mid')).some(x => P.handClassOf(x.c) === oq.hc) ? 'OPEN' : 'FOLD'), 'Open-Frage: Antwort aus RFI.EP');
+    const g1 = K.grade(oq, oq.answer), g2 = K.grade(oq, oq.answer === 'OPEN' ? 'FOLD' : 'OPEN');
+    ok(g1.right && !g2.right, 'Open-Frage wird richtig bewertet');
+    const rep = K.report({ units: { 'b1-01': { started: 1, done: 2, quiz: { n: 6, right: 4, evLoss: 1.2 }, note: 'x' } } });
+    ok(rep.units.length === 1 && rep.course.current === 'b1-02' && rep.units[0].quiz.right === 4, 'Coach-Bericht: erledigte Einheit, nächste ist b1-02');
+  }
+  const names = fr.data.slice(1).map(x => x.path[1]);
+  ok(names[0].startsWith('1 OOP = BB') && names[1].startsWith('2 IP = BTN') && names.slice().sort().join() === names.join(),
+    'Eintragsnamen: OOP sortiert vor IP, Position im Namen');
+  // Schlüssel exakt wie in einer echten Export-Datei aus Desktop Postflop v0.2.7 (16.11.2026).
+  const KEYS = 'startingPot,effectiveStack,rakePercent,rakeCap,donkOption,oopFlopBet,oopFlopRaise,oopTurnBet,oopTurnRaise,oopTurnDonk,oopRiverBet,oopRiverRaise,oopRiverDonk,ipFlopBet,ipFlopRaise,ipTurnBet,ipTurnRaise,ipRiverBet,ipRiverRaise,addAllInThreshold,forceAllInThreshold,mergingThreshold,expectedBoardLength,addedLines,removedLines';
+  const cv = fc.data[1].value;
+  ok(Object.keys(cv).join(',') === KEYS, 'configurations: alle Schlüssel, gleiche Reihenfolge');
+  ok(cv.startingPot === +ex2.potChips && cv.effectiveStack === +ex2.effChips && Number.isInteger(cv.startingPot), 'Pot/Stack als ganze Zahlen');
+  ok(/^[\d., x]*$/.test(cv.oopFlopBet + cv.ipTurnBet + cv.ipRiverRaise), 'Bet-Strings nur Zahlen/x');
 }
 
 console.log('\n' + (fails ? `### ${fails} FEHLER ###` : '### Alle Tests bestanden ###'));

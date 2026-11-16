@@ -18,7 +18,7 @@ const html = read('index.html');
 const css = read('css/style.css');
 const JS_FILES = ['js/engine.js', 'js/review.js', 'js/ranges.js', 'js/strategy.js',
   'js/handprofile.js', 'js/plan.js', 'js/tips.js', 'js/mental.js', 'js/eqtable.js', 'js/icm.js',
-  'js/w2d.js', 'js/w2dstats.js', 'js/w2daudit.js', 'js/multiway.js', 'js/w2dleaks.js', 'js/w2dpost.js', 'js/ownhands.js', 'js/riverdrill.js', 'js/app.js'];
+  'js/w2d.js', 'js/w2dstats.js', 'js/w2daudit.js', 'js/multiway.js', 'js/w2dleaks.js', 'js/w2dpost.js', 'js/ownhands.js', 'js/riverdrill.js', 'js/stackoff.js', 'js/rangeflow.js', 'js/course.js', 'js/courseui.js', 'js/app.js'];
 
 // --- Body-Inhalt herauslösen ---------------------------------------------
 const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);

@@ -1,66 +1,90 @@
 /* =========================================================================
-   plan.js — 35-Tage-Trainingsplan bis zum King's Million
+   plan.js — 35-Tage-Trainingsplan bis zur CAPT Million
 
-   Zieltermin: King's Million European Poker Championship,
-   16.09.2026 – 06.10.2026, King's Resort Rozvadov (€10M GTD).
-   Planstart 12.08.2026, also genau fünf Wochen à 30 Minuten.
+   Ziel: CAPT Million (Casinos Austria Poker Tour), €550, €1.000.000 GTD.
+   Zwei Termine in derselben Woche:
+     - Di 10.11.2026, 19:00 — Satellite-Starttag Graz (€50+10, Tickets à €550)
+     - Sa 14.11.2026, 16:00 — CAPT-Million-Starttag Graz (€500+50)
+   Wer im Flight unter die besten 10 % kommt, spielt das Finale in Baden
+   (Day 2 am 28.11.). Planstart 08.10.2026, fünf Wochen à 30 Minuten bis
+   zum Tag nach dem Satellite.
 
-   Der Aufbau folgt drei Befunden, nicht dem Bauchgefühl:
+   Der Aufbau folgt dem, was die beiden Turniere tatsächlich verlangen:
 
-   1. ERST BLOCKEN, DANN MISCHEN. Geblocktes Üben (immer derselbe Spot-Typ)
-      lernt schneller, behält aber schlechter. Interleaving (gemischt) ist
-      anfangs unangenehmer und gewinnt bei Behalten und Transfer — vor allem
-      dort, wo ähnliche Kategorien unterschieden werden müssen. Postflop ist
-      zuerst Regelanwendung (der 5-Schritte-Prozess) und danach Unterscheidung
-      ("welcher Spot ist das überhaupt?"). Deshalb Woche 1 geblockt, ab
-      Woche 3 alles gemischt.
+   1. SCHNELLE LEVEL HEISSEN KURZE STACKS. 20 Minuten im Satellite, 30 im
+      Flight: der Großteil beider Abende wird unter 25bb gespielt. Deshalb
+      beginnt der Plan dort, wo der King's-Plan aufgehört hat — Push/Fold
+      in Woche 1, nicht in Woche 4.
 
-   2. ABRUF STATT WIEDERLESEN. Jede Einheit beginnt mit der fälligen
-      Wiederholungsqueue, nicht mit Theorie. Und der Lernmodus geht ab
-      Woche 2 aus: selbst schätzen und danach prüfen schlägt vorgesagt
-      bekommen, auch wenn es sich schlechter anfühlt.
+   2. DREI VERSCHIEDENE BUBBLES. Ein normales Turnier (Auszahlungskurve),
+      der Flight (Top 10 % weiter, mind. €1.500, aber der Stack zählt für
+      Day 2 weiter) und der Satellite (gleiche Tickets — Chips über der
+      Ticketgrenze sind wertlos). Woche 3 und 4 trennen sie bewusst, weil
+      die Call-Grenzen weit auseinanderliegen (siehe js/tips.js, Woche 4).
 
-   3. LIVE ENDET IM PUSH/FOLD. Aus der echten Struktur (unten): 50.000
-      Startchips bei BB 300 sind 167bb — sehr tief. Aber ab Level 11 von 19
-      ist ein Stack, der nichts gewinnt, unter 20bb. Die letzten neun Level
-      von Tag 1 sind Push/Fold. Woche 4 geht komplett dorthin — das Band,
-      das im Profil bisher ausgeklammert war.
+   3. ERST BLOCKEN, DANN MISCHEN, ABRUF STATT WIEDERLESEN. Unverändert aus
+      dem King's-Plan: jede Einheit beginnt mit der Wiederholungsqueue, und
+      die letzte Woche mischt alles, so wie es am Tisch auch kommt.
    ========================================================================= */
 (function () {
   const P = window.PT;
 
-  /* Zielturnier: das Super Main Event (€5M GTD), nicht der Festivalstart.
-     Das Festival läuft ab 16.09., das Main Event erst ab 30.09. — dadurch
-     bleiben zwei Wochen mehr Vorbereitung als zunächst angenommen. */
+  /* Gegengeprüft am 08.10.2026 an casinos.at (Flight und Satellite) sowie
+     pokerexklusiv.com und hochgepokert.com (Finale, Best Stack Forward). */
   const TARGET = {
-    name: "King's Million — Super Main Event",
-    festival: "King's Million European Poker Championship",
-    venue: "King's Resort Rozvadov",
-    festivalStart: '2026-09-16', festivalEnd: '2026-10-06',
-    start: '2026-09-30', end: '2026-10-06',
-    buyIn: 1150, gtd: 5000000, gtdText: '€5.000.000'
+    name: 'CAPT Million',
+    venue: 'Casinos Austria · Starttage in Graz, Finale im Casino Baden',
+    start: '2026-11-14',                 // dein Flight — darauf zählt der Countdown
+    buyIn: 550, gtd: 1000000, gtdText: '€1.000.000'
   };
-  /* Aus Buy-in und Garantie geschätzt: bei rund €1.000 je Eintritt in den
-     Pool braucht die Garantie etwa 5.000 Einträge, bezahlt werden davon
-     üblicherweise ~15 %. Wird für die Voreinstellung des Range-Designers
-     benutzt, nicht für harte Aussagen. */
-  const FIELD = { entriesForGtd: 5000, paidShare: 0.15 };
-  function estimatedPaid() { return Math.round(FIELD.entriesForGtd * FIELD.paidShare); }
 
-  const PLAN_START = '2026-08-12';
-  const DAYS = 49;                       // sieben Wochen bis zum 29.09.
+  /* Die drei Termine, um die es geht. "stack" ist das, womit du wirklich
+     startest — beim Satellite inklusive Gold Bonus, den laut Spieler jeder
+     bekommt, auch bei jedem Re-Entry. */
+  const EVENTS = [
+    {
+      key: 'sat', date: '2026-11-10', time: '19:00', name: 'Satellite-Starttag Graz',
+      venue: 'Casino Graz', buyIn: '€50+10', stack: 18000, stackText: '15.000 + 3.000 Gold Bonus',
+      levelMin: 20, reentry: 'unbegrenzt', prize: 'garantiert 5 Tickets à €550, meist mehr'
+    },
+    {
+      key: 'flight', date: '2026-11-14', time: '16:00', name: 'CAPT-Million-Starttag Graz',
+      venue: 'Casino Graz', buyIn: '€500+50', stack: 100000, stackText: '100.000',
+      levelMin: 30, reentry: '1 (Nachmelden bis Ende Level 10)',
+      prize: 'Top 10 % weiter, mind. €1.500 · Best Stack Forward, je weitere Qualifikation €4.000'
+    },
+    {
+      key: 'final', date: '2026-11-28', end: '2026-11-30', time: '', name: 'Finale (Day 2 bis Finaltisch)',
+      venue: 'Casino Baden', buyIn: '—', stack: null, stackText: 'dein Flight-Stack',
+      levelMin: null, reentry: '—', prize: '€1.000.000 GTD'
+    }
+  ];
+  function eventOn(iso) { return EVENTS.find(e => e.date === iso) || null; }
 
-  /* ---------------- Die echte Blindstruktur ----------------
-     Vom Spieler geliefert (Tag 1–3). Zwei Dinge daran sind wichtig:
+  /* Re-Entry-Regel für den Satellite. Vorher festgelegt, weil man sie
+     nach einem Bust am schlechtesten trifft. Die 25bb sind eine Faustregel
+     (darunter ist ein frischer Stack sofort im Push/Fold), keine Rechnung;
+     die Grenze in Chips folgt daraus exakt: 18.000 / 25 = 720. */
+  const REENTRY = {
+    maxShots: 3, minBB: 25, startChips: 18000,
+    get maxBigBlind() { return this.startChips / this.minBB; },
+    rakeSat: 10 / 60, rakeMain: 50 / 550
+  };
+
+  const PLAN_START = '2026-10-08';
+  const DAYS = 35;                       // fünf Wochen bis 11.11., Tag nach dem Satellite
+
+  /* ---------------- Referenzstruktur: King's Million ----------------
+     Die Blindstrukturen von Satellite und Flight liegen noch nicht vor.
+     Bis dahin rechnet der Tab *Rechnen* mit der letzten echten Struktur,
+     die der Spieler geliefert hat (King's Million, Tag 1–4) — damit die
+     Aufgaben in glatten, legbaren Jetonbeträgen kommen. Für Stacktiefen
+     des CAPT taugt sie NICHT; deshalb zeigt der Plan keine Tiefentabelle.
 
      1. Die Ante entspricht dem Big Blind (BB-Ante). Genau das nimmt das
         ICM-Modell an — totes Geld vor dem Flop = SB + BB + Ante = 2,5bb.
-        Level 1 ist die Ausnahme: 100/300 macht 2,33bb.
-     2. Der Startstack sind 50.000 bei BB 300, also **167bb**. Damit läuft
-        ein Stack, der nichts gewinnt, durch jedes Stackband nach unten —
-        die Tabelle zeigt, ab welchem Level welche Phase dran ist.
-        (Eine frühere Angabe von 60.000 stammte aus einem Nachrichtenartikel
-        und war falsch; maßgeblich ist die Strukturübersicht.)               */
+     2. 50.000 Startchips bei BB 300, 47 Level über vier Tage.             */
+  const STRUCTURE_NAME = "King's Million (Referenz, bis die CAPT-Struktur vorliegt)";
   const START_CHIPS = 50000;
   const DAY1 = [
     [100, 300], [200, 400], [200, 500], [300, 600], [400, 800], [500, 1000],
@@ -86,10 +110,6 @@
     d.map(l => ({ day: i + 1, sb: l[0], bb: l[1], ante: l[1] }))
   )).map((l, i) => Object.assign({ lvl: i + 1 }, l));
 
-  /* Prüft die Struktur auf Lücken. Genau das hat einen echten Fehler
-     gefunden: in der ersten Fassung fehlte Tag 3 komplett, wodurch der
-     Big Blind von 150.000 auf 2.000.000 sprang (Faktor 13,3). Mit dem
-     vollständigen Plan liegt der größte Sprung bei 1,33. */
   /** Stelle(n), an denen die Blinds unplausibel springen. */
   function structureAnomalies() {
     const out = [];
@@ -100,114 +120,72 @@
     return out;
   }
 
-  /** Stacktiefe in bb je Level, für einen gegebenen Chipstand. */
-  function depthTable(chips) {
-    chips = chips || START_CHIPS;
-    return LEVELS.map(l => {
-      const bb = chips / l.bb;
-      return {
-        lvl: l.lvl, day: l.day, sb: l.sb, bb: l.bb, ante: l.ante, depth: bb,
-        band: bb >= 60 ? 'deep' : bb >= 35 ? 'mid' : bb >= 20 ? 'short' : 'push',
-        dead: (l.sb + l.bb + l.ante) / l.bb        // totes Geld in bb
-      };
-    });
-  }
-  /** Erstes Level, ab dem ein unveränderter Stack in dieses Band fällt. */
-  function firstLevelOf(band, chips) {
-    const t = depthTable(chips).find(x => x.band === band);
-    return t ? t.lvl : null;
-  }
-
   /* ---------------- Wochen ---------------- */
   const WEEKS = [
     {
-      n: 1, title: 'Prozess automatisieren',
-      why: 'Geblockt: **immer derselbe Spot-Typ**, damit sich der 5-Schritte-Ablauf einschleift. ' +
-        'Der Lernmodus bleibt an — du siehst Board- und Range-Info schon bei der Frage. ' +
-        'Das ist bewusst die einfachste Woche: erst die Regel, dann die Schwierigkeit.',
-      cfg: { stacks: ['mid'], tags: ['SRP'], autoHint: true, profile: 'reg', multi: true },
-      cfgText: 'Nur Single Raised Pots als Aggressor · 40–60bb · Lernmodus AN · Gegner: Reg',
-      hands: ['AKo', 'AKs', 'AQo', 'KQs', 'TT', '88', 'A5s', 'KJo'],
-      goal: 'Die fünf Schritte laut durchgehen, bevor du klickst. Tempo ist egal.',
-      check: 'Du kannst zu jedem Board sagen, ob es statisch oder dynamisch ist, ohne nachzudenken.'
-    },
-    {
-      n: 2, title: 'Lernmodus aus, Defense dazu',
-      why: 'Zwei Änderungen: Du schätzt Board-Textur und Range-Advantage jetzt **selbst** und prüfst ' +
-        'erst danach — das fühlt sich schlechter an und behält besser. Und Defense kommt dazu, ' +
-        'damit du beide Rollen unterscheiden lernst statt nur eine zu beherrschen.',
-      cfg: { stacks: ['mid', 'deep'], tags: ['SRP', 'DEF'], autoHint: false, profile: 'reg', multi: true },
-      cfgText: 'SRP + Defense · 40–100bb · Lernmodus AUS · Gegner: Reg',
-      hands: ['76s', '65s', 'T9s', 'J9s', 'KTo', 'A7o', '44', 'Q9s'],
-      goal: 'Equity gegen seine **Bet-Range** rechnen, nicht gegen seine Preflop-Range.',
-      check: 'Bei jeder Bet gegen dich kennst du Pot Odds und MDF, bevor du das Feedback aufklappst.'
-    },
-    {
-      n: 3, title: 'Alles gemischt — 3-Bet-Pots und Mehrweg',
-      why: 'Jetzt wird interleaved: Jede Hand kann ein anderer Spot-Typ sein. Dein Score wird ' +
-        'kurzfristig sinken — genau das ist der Effekt. Du trainierst nicht mehr die Antwort, ' +
-        'sondern das **Erkennen der Frage**. 3-Bet-Pots bringen niedrigen SPR dazu, Mehrweg-Pots ' +
-        'das Gegenteil von allem, was du bisher gelernt hast: **weniger betten, kaum bluffen.** ' +
-        'Am Live-Tisch ist der Dreiwege-Pot der Normalfall, nicht die Ausnahme — im Day-1-Feld ' +
-        'wird gelimpt und mitgegangen. Genau deshalb kommt er hier und nicht erst am Ende.',
-      cfg: { stacks: ['mid', 'deep'], tags: ['SRP', 'DEF', '3BP', 'BvB', 'MW'], autoHint: false, profile: 'reg', multi: true },
-      cfgText: 'Alle Spot-Typen inkl. **Mehrweg** · 40–100bb · Lernmodus AUS · Gegner: Reg',
-      hands: ['QQ', 'JJ', 'AQs', 'A5s', 'KQs', '99', 'AJs', 'KJs'],
-      goal: 'Vor jeder Bet: „Was mache ich, wenn er raist?" Bei SPR unter 2 entscheidest du **jetzt** über den Stack. Im Mehrweg-Pot vorher zählen, **wie viele** noch drin sind.',
-      check: 'Du erkennst in zwei Sekunden, ob du im SRP, im 3-Bet-Pot oder im Dreiwege-Pot bist — und dass im letzten Fall fast alles außer Value in den Check gehört.'
-    },
-    {
-      n: 4, title: 'Kurze Stacks & Push/Fold',
-      why: 'Das Band, das du bisher ausgelassen hast — und das, in dem sich das Turnier entscheidet. ' +
-        'Das Main Event startet zwar sehr tief (60.000 Chips, 40-Minuten-Level), aber die Blinds ' +
-        'holen auf: Unter 20bb gibt es keine drei Straßen mehr, nur noch shove oder nicht. ' +
-        'Die Shove-EV-Tabelle im Steckbrief ist hier das Werkzeug: **echte bb, keine Heuristik.**',
-      cfg: { stacks: ['push', 'short'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true },
-      cfgText: 'Alle Spot-Typen · **12–35bb** · Lernmodus AUS · Gegner: Reg',
+      n: 1, title: 'Push/Fold unter 20bb',
+      why: 'Bei 20-Minuten-Leveln im Satellite und 30 im Flight ist **unter 20bb der Normalfall**, ' +
+        'nicht die Ausnahme. Unter 20bb gibt es keine drei Straßen mehr, nur noch shove oder nicht. ' +
+        'Das Werkzeug ist die Shove-EV-Tabelle im Steckbrief: **echte bb, keine Heuristik.** ' +
+        'Geblockt — nur dieses Band, damit die Grenzen sitzen, bevor es gemischt wird.',
+      cfg: { stacks: ['push'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true },
+      cfgText: 'Alle Spot-Typen außer Mehrweg · **12–20bb** · Lernmodus AUS · Gegner: Reg',
       hands: ['AJo', 'KQo', 'A9s', '55', '22', 'KTs', 'QJs', 'A2s'],
       goal: 'Für jede Hand des Tages die Shove-EV bei 10/15/20bb ansehen und die Grenze merken, ab der sie negativ wird.',
       check: 'Du weißt aus dem Kopf, welche Hände du mit 12bb vom BTN shovst und welche nicht.'
     },
     {
-      n: 5, title: 'ICM & Bubble',
+      n: 2, title: 'Kurze Stacks & das Live-Feld',
+      why: 'Jetzt 12–35bb gemischt und gegen **gemischte Gegner** — an einem Dienstagabend in Graz ' +
+        'sitzen Recreationals, und gegen die kommt das Geld aus **dünnem Value**, nicht aus Bluffs. ' +
+        'Mehrweg-Pots sind dabei, weil live gelimpt und mitgegangen wird: dort fällt Bluffen ' +
+        'praktisch weg. Die Frage vor jeder Entscheidung: **Wie tief bin ich, und wer sitzt mir gegenüber?**',
+      cfg: { stacks: ['push', 'short'], tags: ['SRP', 'DEF', '3BP', 'BvB', 'MW'], autoHint: false, profile: 'mix', multi: true },
+      cfgText: 'Alle Spot-Typen inkl. Mehrweg · 12–35bb · Gegner: **gemischt**',
+      hands: ['AQo', 'KJs', 'T9s', '66', 'A8s', 'QTo', '55', 'J9s'],
+      goal: 'Gegen die Calling Station dünner Value, gegen den Nit Bluffs. Vor jedem Mehrweg-Pot zählen, wie viele noch drin sind.',
+      check: 'Du weißt bei jeder Hand, ob du shovst, openst oder foldest, bevor du die Gegnerinfo liest — und passt dann nur noch das Sizing an.'
+    },
+    {
+      n: 3, title: 'ICM & die Bubble im Flight',
       why: 'Bis hier war alles in Chips gerechnet. An der Bubble ist das falsch: die Chips, die du ' +
-        'gewinnst, sind weniger wert als die, die du verlierst. Die Woche dreht sich um **eine** ' +
-        'Unterscheidung, und es ist die, an der die meisten scheitern — **Shoven und Callen sind an ' +
-        'der Bubble gegensätzlich.** Beim Shoven hilft dir der Druck der anderen, beim Callen wirkt ' +
-        'er gegen dich. Im Tab *Range* siehst du beide Ranges nebeneinander.',
+        'gewinnst, sind weniger wert als die, die du verlierst. Im Flight kommen die besten **10 %** ' +
+        'weiter, mit mindestens **€1.500** — fast das Dreifache des Buy-ins. Das ist ein großer Sprung, ' +
+        'aber anders als im Satellite zählt dein Stack danach weiter (Best Stack Forward, Day 2). ' +
+        'Die Woche dreht sich um **eine** Unterscheidung: **Shoven und Callen sind an der Bubble ' +
+        'gegensätzlich.** Im Tab *Range* siehst du beide Ranges nebeneinander.',
       cfg: { stacks: ['push', 'short'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true },
-      cfgText: 'Alle Spot-Typen · 12–35bb · Lernmodus AUS · dazu täglich der **Range-Designer**',
+      cfgText: 'Alle Spot-Typen · 12–35bb · dazu täglich der **Range-Designer** (Auszahlung: Turnier)',
       hands: ['AJo', 'KQo', '99', '77', 'A5s', 'KTs', 'QJs', '44'],
-      goal: 'Vor jedem Spot an der Bubble: **Bin ich der Kürzeste?** Wenn nein, ist Warten bares Geld wert. Wenn ja, hilft Warten nichts — dich frisst der Blind. Und getrennt davon: **Shove ich hier, oder calle ich?** Das sind zwei Fragen, nicht eine.',
-      check: 'Du nennst aus dem Kopf die drei Zahlen gegen einen 8bb-Shove an der Bubble: als **kurzer Stack callst du ~8 %**, als **Chipleader ~27 %**, ohne ICM wären es in beiden Fällen ~28 %. Wer als Shorty die 28 % benutzt, verliert das Turnier genau dort.',
+      goal: 'Vor jedem Spot an der Bubble: **Bin ich der Kürzeste?** Wenn nein, ist Warten bares Geld wert. Wenn ja, hilft Warten nichts. Und getrennt davon: **Shove ich hier, oder calle ich?**',
+      check: 'Du nennst aus dem Kopf die drei Zahlen gegen einen 8bb-Shove an der Bubble: als **kurzer Stack callst du ~8 %**, als **Chipleader ~27 %**, ohne ICM wären es in beiden Fällen ~28 %.',
       tool: 'range'
     },
     {
-      n: 6, title: 'Kopfrechnen & Sizings',
-      why: 'Live rechnet niemand für dich, und du hast 30 Sekunden. Diese Woche geht auf Tempo statt ' +
-        'auf neue Theorie: Pot Odds, MDF und Bluff-Break-even so oft, bis sie ohne Nachdenken kommen — ' +
-        'und die Sizings deines Turniers in **Jetons**, nicht in Prozent. Wer am Tisch erst umrechnen ' +
-        'muss, verrät sich über die Zeit, die er braucht.',
-      cfg: { stacks: ['short', 'mid'], tags: ['SRP', 'DEF', '3BP', 'BvB', 'MW'], autoHint: false, profile: 'mix', multi: true },
-      cfgText: 'Alle Spot-Typen inkl. Mehrweg · 20–60bb · Gegner: gemischt · dazu täglich der Tab **Rechnen**',
-      hands: ['AQo', 'KJs', 'T9s', '66', 'A8s', 'QTo', '55', 'J9s'],
-      goal: '20 Rechenaufgaben pro Tag, Ziel über 85 % richtig. Dazu die 33-%-Spalte deines Levels auswendig.',
-      check: 'Du nennst zu „Pot 24.000, er setzt 8.000" die nötige Equity in unter fünf Sekunden.',
-      tool: 'rechnen'
+      n: 4, title: 'Satellite: nur das Ticket zählt',
+      why: 'Im Satellite sind alle Ticketplätze gleich viel wert. **Platz 1 bekommt dasselbe wie der ' +
+        'letzte Ticketplatz** — jeder Chip darüber ist wertlos. Weit weg von der Bubble ändert das ' +
+        'fast nichts, du sammelst Chips wie immer. Nahe an der Bubble ändert es alles: ' +
+        'die Call-Grenze steigt viel stärker als im normalen Turnier. Im Range-Designer jetzt ' +
+        '**Auszahlung: Satellite** einstellen und die Presets durchgehen.',
+      cfg: { stacks: ['push', 'short'], tags: ['SRP', 'DEF', 'BvB'], autoHint: false, profile: 'mix', multi: true },
+      cfgText: 'Steals, Defense, BvB · 12–35bb · dazu täglich der **Range-Designer (Satellite)** und der Shove-Call-Trainer',
+      hands: ['AKo', 'AQo', 'TT', '88', 'A9s', 'KQs', 'A5s', 'KJo'],
+      goal: 'Vor jeder Entscheidung an der Satellite-Bubble: **Wie viele müssen noch raus, und wie viele sind kürzer als ich?** Wenn genug kürzer sind, ist Folden fast immer richtig — auch mit Händen, die sich stark anfühlen.',
+      check: 'Im Shove-Call-Trainer mit Auszahlung Satellite liegst du über 85 % — und kannst sagen, warum dieselbe Hand im normalen Turnier ein Call wäre.',
+      tool: 'range'
     },
     {
-      n: 7, title: 'Simulation & Leak-Abbau',
-      why: 'Letzte Woche vor Rozvadov. Keine neuen Themen mehr — Konsolidierung. Gegnertypen ' +
-        '(im Day-1-Feld sitzen Recreationals, und gegen die kommt dein Geld aus **dünnem Value**, ' +
-        'nicht aus Bluffs) und deine eigene Fehlerliste. Dazu einmal die Fehlertabelle im Tab ' +
-        '*Prozess* durchgehen und ehrlich abhaken, welche drei davon deine sind. ' +
-        'Diese Woche läuft **alles** mit: alle Stacks, alle Spot-Typen, Mehrweg inklusive — ' +
-        'so, wie es am Tisch auch kommt.',
-      cfg: { stacks: ['push', 'short', 'mid', 'deep'], tags: ['SRP', 'DEF', '3BP', 'BvB', 'MW'], autoHint: false, profile: 'mix', multi: true },
-      cfgText: 'Alles · alle Stacks · Mehrweg an · Lernmodus AUS · Gegner: **gemischt**',
+      n: 5, title: 'Generalprobe — Satellite am Dienstag',
+      why: 'Keine neuen Themen mehr. Alles läuft gemischt, und die Hände kommen aus **deiner eigenen ' +
+        'Fehlerliste**. Am Dienstag ist der Satellite: die Einheit an dem Tag ist kurz und dreht sich ' +
+        'nur um die Re-Entry-Regel und die Bubble. Danach bis zum Flight am Samstag: Wiederholen, ' +
+        'nicht Lernen.',
+      cfg: { stacks: ['push', 'short', 'mid'], tags: ['SRP', 'DEF', '3BP', 'BvB', 'MW'], autoHint: false, profile: 'mix', multi: true },
+      cfgText: 'Alles · 12–60bb · Mehrweg an · Lernmodus AUS · Gegner: **gemischt**',
       hands: null,
-      goal: 'Gegen die Calling Station dünner Value betten und Bluffs streichen. Gegen den Nit umgekehrt. Im Mehrweg-Pot gegen beide: Bluffs komplett weg.',
-      check: 'Dein Score liegt über alle Spot-Typen hinweg im gleichen Bereich — kein Ausreißer nach unten mehr, auch nicht bei MW.'
+      goal: 'Jede Entscheidung in einem Satz: Tiefe, Gegner, Plan. Wer das nicht in einem Satz sagen kann, hat keinen Plan.',
+      check: 'Dein Score liegt über alle Spot-Typen hinweg im gleichen Bereich, und die Re-Entry-Regel steht auf Papier.'
     }
   ];
 
@@ -221,7 +199,7 @@
       dow: 1, key: 'steck', name: 'Steckbrief-Tag',
       blocks: [
         ['5 min', 'Fällige Wiederholungen abarbeiten (⟳ oben rechts).'],
-        ['10 min', 'Die beiden Hand-Steckbriefe des Tages lesen — Trefferverteilung, Gefahren-Landkarte, Archetyp-Text.'],
+        ['10 min', 'Die beiden Hand-Steckbriefe des Tages lesen — vor allem die Shove-EV-Tabelle.'],
         ['15 min', 'Drill mit dem Wochen-Setup. Achte auf genau die beiden Hände, wenn sie kommen.']
       ]
     },
@@ -274,11 +252,23 @@
     }
   ];
 
+  /* Turniertage ersetzen die normale Tagesform: kurz, nichts Neues. */
+  const EVENTDAY = {
+    sat: {
+      key: 'event', name: 'Satellite-Tag',
+      blocks: [
+        ['5 min', 'Fällige Wiederholungen — nur das, nichts Neues.'],
+        ['10 min', 'Range-Designer, Auszahlung Satellite: einmal „Satellite-Bubble" und einmal „Satellite früh" rechnen lassen und den Unterschied ansehen.'],
+        ['5 min', `Die Re-Entry-Regel auf Papier: höchstens ${REENTRY.maxShots} Shots, Re-Entry nur bis Big Blind ${REENTRY.startChips / REENTRY.minBB} (${REENTRY.minBB}bb mit ${REENTRY.startChips.toLocaleString('de-DE')} Chips). Und vorher entscheiden: Spielst du den Flight am Samstag auch ohne Ticket?`]
+      ]
+    }
+  };
+
   /* ---------------- Datums-Helfer ----------------
      Bewusst über UTC-Mitternacht gerechnet: Sommerzeit-Wechsel würden bei
      lokaler Zeit einen 23- oder 25-Stunden-Tag erzeugen und den Index um
-     einen Tag verschieben. Genau zwischen Planstart und Turnier liegt der
-     26.10. — der Fehler wäre also aufgetreten.                            */
+     einen Tag verschieben. Genau im Plan liegt der 25.10. — der Fehler
+     würde also auftreten.                                                 */
   const DAY_MS = 86400000;
   function toUTC(iso) {
     const [y, m, d] = iso.split('-').map(Number);
@@ -294,9 +284,10 @@
     const i = Math.round((todayUTC(now) - toUTC(PLAN_START)) / DAY_MS);
     return i >= 0 && i < DAYS ? i : null;
   }
-  function daysUntilTarget(now) {
-    return Math.round((toUTC(TARGET.start) - todayUTC(now)) / DAY_MS);
+  function daysUntil(iso, now) {
+    return Math.round((toUTC(iso) - todayUTC(now)) / DAY_MS);
   }
+  function daysUntilTarget(now) { return daysUntil(TARGET.start, now); }
   function dateOf(i) { return isoOf(toUTC(PLAN_START) + i * DAY_MS); }
   function fmtDate(iso) {
     const [y, m, d] = iso.split('-');
@@ -312,19 +303,20 @@
     const week = WEEKS[Math.floor(i / 7)];
     const iso = dateOf(i);
     const dow = new Date(toUTC(iso)).getUTCDay();
-    const type = DAYTYPES.find(t => t.dow === dow) || DAYTYPES[1];
+    const ev = eventOn(iso);
+    const type = (ev && EVENTDAY[ev.key]) || DAYTYPES.find(t => t.dow === dow) || DAYTYPES[1];
     // Zwei Handklassen pro Tag, über die Woche rotierend. Der Pool aus der
     // eigenen Fehlerstatistik kann kurz sein — dann mit Standardhänden
     // auffüllen, damit an einem Tag nie zweimal dieselbe Hand steht.
-    const FALLBACK = ['AKo', 'A5s', '76s', 'JJ', 'KQo', 'T9s'];
+    const FALLBACK = ['AKo', 'A5s', 'KQo', 'TT', 'A9s', 'KJs'];
     let pool = week.hands || (worstHands || []).slice();
     if (pool.length < 2) pool = pool.concat(FALLBACK.filter(h => !pool.includes(h)));
     const k = (i % 7) * 2;
     const hands = [pool[k % pool.length], pool[(k + 1) % pool.length]];
-    return { i, iso, date: fmtDate(iso), week, type, hands, dayOfWeek: i % 7 };
+    return { i, iso, date: fmtDate(iso), week, type, hands, dayOfWeek: i % 7, event: ev };
   }
 
-  /** Die drei Handklassen mit dem schlechtesten Score (mind. 3 Entscheidungen). */
+  /** Die schlechtesten Handklassen (mind. 3 Entscheidungen), schlechteste zuerst. */
   function worstHandsFrom(byHand) {
     return Object.keys(byHand || {})
       .filter(h => byHand[h].max >= 9)
@@ -333,8 +325,8 @@
   }
 
   P.Plan = {
-    TARGET, PLAN_START, DAYS, WEEKS, DAYTYPES, LEVELS, START_CHIPS,
-    depthTable, firstLevelOf, structureAnomalies, DAY1, DAY2, DAY3, DAY4,
-    dayIndex, daysUntilTarget, dateOf, fmtDate, sessionFor, worstHandsFrom, toUTC, todayUTC
+    TARGET, EVENTS, REENTRY, eventOn, PLAN_START, DAYS, WEEKS, DAYTYPES, EVENTDAY,
+    STRUCTURE_NAME, LEVELS, START_CHIPS, structureAnomalies, DAY1, DAY2, DAY3, DAY4,
+    dayIndex, daysUntil, daysUntilTarget, dateOf, fmtDate, sessionFor, worstHandsFrom, toUTC, todayUTC
   };
 })();

@@ -51,6 +51,19 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Satellite: alle bezahlten Plätze bekommen dasselbe Ticket.
+   * Damit ist jeder Chip über der Ticketgrenze wertlos — Platz 1 ist nicht
+   * mehr wert als der letzte Ticketplatz. Genau das macht die Bubble eines
+   * Satellites so viel enger als die eines normalen Turniers.
+   * ------------------------------------------------------------------ */
+  function flatPayoutsForField(left, tickets) {
+    const t = Math.min(tickets, left);
+    const out = new Array(left).fill(0);
+    for (let i = 0; i < t; i++) out[i] = 1 / t;
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ *
    * ICM-Equity mehrerer Szenarien per Monte Carlo.
    *
    * ENTSCHEIDEND: alle Szenarien teilen dieselben Zufallszahlen (Common
@@ -285,7 +298,7 @@
   function pushFoldICM(cfg, _noDefend) {
     const H = P.HandProfile;
     const field = fieldModel(cfg);
-    const payouts = payoutsForField(cfg.left, cfg.paid);
+    const payouts = cfg.sat ? flatPayoutsForField(cfg.left, cfg.paid) : payoutsForField(cfg.left, cfg.paid);
     const sims = cfg.sims || 40000, eqSims = cfg.eqSims || 1400;
     const behind = Math.max(1, cfg.behind || 3);
     const s = field.hero;
@@ -435,7 +448,7 @@
   }
 
   P.ICM = {
-    PAYOUT_EXP, payoutCurve, payoutsForField, scenarioEquity, heroEquityMulti,
+    PAYOUT_EXP, payoutCurve, payoutsForField, flatPayoutsForField, scenarioEquity, heroEquityMulti,
     fieldModel, metrics, pushFoldICM, rankedHands, topPct, widthOf, ANTE,
     buildMatrix, matrixReady, eqVsSet, classIndex, N_CLASSES
   };

@@ -1588,7 +1588,7 @@
   function scRenderQuestion() {
     const q = S.sc.q, c = q.cfg;
     $('#scOut').innerHTML = `
-      <div class="scask">Noch <b>${c.left}</b> Spieler, <b>${c.bubble}</b> bis zur Bubble.
+      <div class="scask">${c.sat ? `<b>Satellite</b>, ${c.paid} Tickets. ` : ''}Noch <b>${c.left}</b> Spieler, <b>${c.bubble}</b> bis zur Bubble.
         Du hast <b>${c.heroBB}bb</b>. Ein Shorty mit <b>${q.cfg.shortBB}bb</b> shovt vor dir.
         Du hältst ${miniCards(q.cards)} <b>${q.hand}</b>.</div>
       <div class="opts" id="scOpts"></div>`;
@@ -1843,6 +1843,126 @@
     rfScore();
   }
 
+  /* ============================ HAND-CHECK ========================== *
+   * Deine eigenen Stack-off- und 3-Bet-Spots, mit echten Beträgen.
+   * Rechnung in js/stackoff.js. Bewertet wird gegen das Profil
+   * „Calling Station": auf deinen Stakes callen die Gegner eher zu viel
+   * (dein eigener Read). Das Reg-Profil steht daneben zum Vergleich.
+   * ------------------------------------------------------------------ */
+  const SO_PROFIL = 'station';
+  const soCache = {};
+
+  function soAnalyse(spot) {
+    if (!soCache[spot.id]) soCache[spot.id] = {
+      station: P.StackOff.analyse(spot, 'station'),
+      reg: P.StackOff.analyse(spot, 'reg')
+    };
+    return soCache[spot.id];
+  }
+
+  function soNext() {
+    const spots = P.StackOff.SPOTS;
+    S.so = { idx: S.so ? (S.so.idx + 1) % spots.length : 0 };
+    soRenderQuestion();
+  }
+
+  function soRenderQuestion() {
+    const spot = P.StackOff.SPOTS[S.so.idx];
+    const hero = spot.hero.match(/[2-9TJQKA][cdhs]/g).map(P.cardFromStr);
+    const board = (spot.board.match(/[2-9TJQKA][cdhs]/g) || []).map(P.cardFromStr);
+    $('#soOut').innerHTML =
+      '<div class="rfask"><b>' + escapeHtml(spot.titel) + '</b><br><small class="muted">' +
+        escapeHtml(spot.quelle) + ' · Spot ' + (S.so.idx + 1) + ' von ' + P.StackOff.SPOTS.length + '</small><br>' +
+        'Deine Hand ' + miniCards(hero) + (board.length ? ' · Board ' + miniCards(board) : '') + '<br>' +
+        'Pot <b>' + spot.pot.toFixed(1) + 'bb</b>' +
+        (spot.toCall ? ', du musst <b>' + spot.toCall.toFixed(1) + 'bb</b> callen' : ', du bist dran') +
+        ' · hinter dir <b>' + spot.heroBehind.toFixed(1) + 'bb</b>, bei ihm <b>' + spot.villBehind.toFixed(1) + 'bb</b></div>' +
+      '<div class="rflog">' + spot.log.map(l => '<div>' + escapeHtml(l) + '</div>').join('') + '</div>' +
+      '<div class="opts" id="soOpts"></div>';
+    for (const k of spot.options) {
+      const b = document.createElement('button');
+      b.className = 'opt';
+      b.textContent = P.StackOff.OPT_LABEL[k];
+      b.onclick = () => soAnswer(k);
+      $('#soOpts').appendChild(b);
+    }
+    soScore();
+  }
+
+  function soScore() {
+    const st = S.stats.handcheck;
+    $('#soScore').textContent = st && st.total ? st.right + ' von ' + st.total + ' richtig' : '';
+  }
+
+  function soAnswer(key) {
+    $('#soOpts').innerHTML = '<span class="muted">rechnet …</span>';
+    /* Erst zeichnen lassen, dann rechnen: die exakte Equity über alle
+       Runouts dauert pro Spot rund eine Sekunde. */
+    setTimeout(() => soShowResult(key), 30);
+  }
+
+  function soShowResult(key) {
+    const spot = P.StackOff.SPOTS[S.so.idx];
+    const both = soAnalyse(spot);
+    const a = both[SO_PROFIL], r = both.reg;
+    const g = P.StackOff.bewerte(spot, a, key);
+    const st = S.stats.handcheck || (S.stats.handcheck = { right: 0, total: 0 });
+    st.total++; if (g.richtig) st.right++;
+    save();
+
+    const pct = x => (x * 100).toFixed(0) + '%';
+    const zeile = o => {
+      const evR = r.evs[o.key];
+      return '<tr class="' + (o.key === a.best.key ? 'best' : '') + (o.key === key ? ' picked' : '') + '">' +
+        '<td>' + o.label + (o.key === key ? ' <small>(du)</small>' : '') + '</td>' +
+        '<td class="num">' + (o.ev >= 0 ? '+' : '') + o.ev.toFixed(2) + 'bb</td>' +
+        '<td class="num">' + (evR >= 0 ? '+' : '') + evR.toFixed(2) + 'bb</td></tr>';
+    };
+    const gewaehlt = a.evs[key];
+
+    let fakten = '<div class="rfsplit">' +
+      '<div><b>' + pct(a.eqGesamt) + '</b><span>Equity gegen seine ganze Range (' + a.nKombos + ' Kombos)</span></div>';
+    if (spot.options.includes('JAM')) {
+      fakten +=
+        '<div><b>' + pct(1 - a.callAnteil) + '</b><span>foldet er auf dein All-in (Reg-Modell: ' + pct(1 - r.callAnteil) +
+          '). Ein reiner Bluff bräuchte ' + pct(a.foldNoetig) + '</span></div>' +
+        '<div><b>' + pct(a.eqGegenCaller) + '</b><span>Equity gegen die Hände, die callen. Ein gecallter All-in braucht ' +
+          pct(a.jamNoetig) + '</span></div>';
+    }
+    if (a.callNoetig != null && spot.options.includes('CALL')) {
+      fakten += '<div><b>' + pct(a.callNoetig) + '</b><span>brauchst du für den Call (Pot Odds), mit Realisierung hast du effektiv ' +
+        pct(a.eqGesamt * a.realize) + '</span></div>';
+    }
+    fakten += '</div>';
+
+    let zahler = '';
+    if (a.zahler.length) {
+      const tot = a.zahler.reduce((s, z) => s + z[1], 0) || 1;
+      zahler = '<div class="hpnote-sm"><b>Wer dein All-in bezahlt:</b> ' +
+        a.zahler.slice(0, 6).map(z => escapeHtml(z[0]) + ' ' + pct(z[1] / tot)).join(' · ') +
+        (a.vorneGegenCaller != null ? '. Gegen ' + pct(a.vorneGegenCaller) + ' der Caller liegst du gerade vorne.' : '.') + '</div>';
+    }
+
+    $('#soOut').innerHTML =
+      '<div class="verdict ' + (g.richtig ? (g.knapp ? 'ok2' : 'ok') : 'bad') + '">' +
+        (g.richtig ? (g.knapp ? 'Vertretbar — weniger als 0,3bb hinter der besten Option' : 'Richtig') : 'Das kostet') +
+        ' — am besten: <b>' + a.best.label + '</b> (' + (a.best.ev >= 0 ? '+' : '') + a.best.ev.toFixed(2) + 'bb)' +
+        '<small>Du: ' + P.StackOff.OPT_LABEL[key] + ' (' + (gewaehlt >= 0 ? '+' : '') + gewaehlt.toFixed(2) + 'bb) · ' +
+        S.stats.handcheck.right + ' von ' + S.stats.handcheck.total + ' richtig</small></div>' +
+      '<table class="rfev"><tr><th>Aktion</th><th>EV · Calling Station</th><th>EV · Reg</th></tr>' +
+        a.liste.map(zeile).join('') + '</table>' +
+      fakten + zahler +
+      '<div class="hpnote-sm"><b>Seine Range:</b> ' + escapeHtml(spot.villRange) + '<br>' + escapeHtml(spot.villRangeWarum) +
+        (spot.callRange ? '<br><b>Gegen dein All-in callt er mit:</b> ' + escapeHtml(spot.callRange) + ' — ' + escapeHtml(spot.callRangeWarum) : '') + '</div>' +
+      '<div class="hpnote-sm"><b>Was passiert ist:</b> ' + escapeHtml(spot.passiert) + '</div>' +
+      '<div class="hpnote-sm">Call und Check sind als Showdown gerechnet (Equity × ' + a.realize.toFixed(2) +
+        ' × Pot), spätere Straßen fehlen. Ob er foldet, kommt aus derselben Logik wie im Trainer, und daran hängt fast alles. ' +
+        'Deine eigenen Bluffs mit mehr als halbem Stack gingen bis Oktober in 48 % der Fälle durch.</div>' +
+      '<div class="planactions" style="margin-top:.6rem"><button class="primary" id="soNextBtn">Nächster Spot ▸</button></div>';
+    $('#soNextBtn').onclick = soNext;
+    soScore();
+  }
+
   /* ============================ RANGE-DESIGNER ====================== *
    * Push/Fold mit ICM. Die Rechnung steht in js/icm.js, hier nur Eingabe
    * und Darstellung.
@@ -1856,7 +1976,8 @@
       heroBB: num('#rdHero', 5), avgBB: num('#rdAvg', 25),
       shortCount: Math.max(0, Math.round(num('#rdShorts', 10))),
       shortBB: num('#rdShortBB', 8),
-      behind: Math.max(1, Math.round(num('#rdBehind', 4)))
+      behind: Math.max(1, Math.round(num('#rdBehind', 4))),
+      sat: $('#rdPay').value === 'sat'
     };
   }
 
@@ -1904,10 +2025,12 @@
     $('#rdOut').innerHTML = `
       <section class="panel wide hphead">
         <div class="hptitle"><span class="hpname">${cfg.heroBB}bb</span>
-          <span class="hparche" style="border-color:var(--acc)">${cfg.left} übrig · noch ${cfg.bubble} bis zur Bubble</span>
+          <span class="hparche" style="border-color:var(--acc)">${cfg.left} übrig · noch ${cfg.bubble} bis zur Bubble${cfg.sat ? ` · Satellite, ${cfg.paid} Tickets` : ''}</span>
           <span class="muted hpms">${r.ms}ms</span></div>
         <div class="hpkpis">
-          <div class="hpkpi"><div class="v">${(r.metrics.eqNow / r.minCash).toFixed(2)}×</div><div class="k">Min-Cashes, die du gerade wert bist</div></div>
+          ${cfg.sat
+        ? `<div class="hpkpi"><div class="v">${(r.metrics.eqNow / r.minCash * 100).toFixed(0)}%</div><div class="k">Ticket-Chance laut Modell</div></div>`
+        : `<div class="hpkpi"><div class="v">${(r.metrics.eqNow / r.minCash).toFixed(2)}×</div><div class="k">Min-Cashes, die du gerade wert bist</div></div>`}
           <div class="hpkpi"><div class="v">${bf.toFixed(2)}</div><div class="k">Bubble-Faktor</div></div>
           <div class="hpkpi"><div class="v">${(r.metrics.needFlip * 100).toFixed(0)}%</div><div class="k">nötig für einen Flip (statt 50%)</div></div>
           <div class="hpkpi"><div class="v">${r.push.pct.toFixed(0)}%</div><div class="k">deine Shove-Range</div></div>
@@ -1982,9 +2105,12 @@
       <section class="panel wide"><h3>Modell — was hier drinsteckt und was nicht</h3>
         <div class="hpnote-sm">
           <b>Gerechnet:</b> Malmuth-Harville über alle ${cfg.left} Spieler, per Monte Carlo geschätzt.
-          Auszahlungskurve als Potenzgesetz — bei ${cfg.paid} bezahlten Plätzen ergibt das
+          ${cfg.sat
+        ? `Auszahlung als <b>Satellite</b>: ${cfg.paid} gleiche Tickets, jedes ${(r.minCash * 100).toFixed(1)}% des Pools.
+          Platz 1 ist nicht mehr wert als der letzte Ticketplatz — Chips darüber sind wertlos.`
+        : `Auszahlungskurve als Potenzgesetz — bei ${cfg.paid} bezahlten Plätzen ergibt das
           Sieger <b>${(r.firstPrize * 100).toFixed(1)}%</b> des Pools und Min-Cash
-          <b>${(r.minCash * 100).toFixed(3)}%</b>. Die Call-Range des Gegners ist nicht gesetzt, sondern
+          <b>${(r.minCash * 100).toFixed(3)}%</b>.`} Die Call-Range des Gegners ist nicht gesetzt, sondern
           aus seiner eigenen ICM-Rechnung hergeleitet; beide Ranges werden gegeneinander bis zum
           Stillstand iteriert.
           <br><br>
@@ -1997,7 +2123,7 @@
   }
 
   /* ============================ TRAININGSPLAN ======================= *
-   * 35 Tage à 30 Minuten bis zum King's Million. Die Logik und die
+   * 35 Tage à 30 Minuten bis zur CAPT Million. Die Logik und die
    * Begründung stehen in js/plan.js — hier nur Darstellung und der
    * Ein-Klick-Start, der das Wochen-Setup in die Einstellungen schreibt.
    * ------------------------------------------------------------------ */
@@ -2037,10 +2163,10 @@
       <div class="planttl">
         <div><div class="plantarget">${PL.TARGET.name}</div>
           <div class="muted">${PL.TARGET.venue} · €${PL.TARGET.buyIn.toLocaleString('de-DE')} ·
-            <b>${PL.TARGET.gtdText} GTD</b> · ${PL.fmtDate(PL.TARGET.start)}–${PL.fmtDate(PL.TARGET.end)}2026<br>
-            Festival ab ${PL.fmtDate(PL.TARGET.festivalStart)} — der Plan zielt auf das Main Event,
-            nicht auf den Festivalstart.</div></div>
-        <div class="plancount"><div class="v">${until > 0 ? until : 0}</div><div class="k">Tage bis Start</div></div>
+            <b>${PL.TARGET.gtdText} GTD</b><br>
+            ${PL.EVENTS.map(e => `${e.name}: <b>${PL.fmtDate(e.date)}${e.end ? '–' + PL.fmtDate(e.end) : ''}</b>${e.time ? ' ' + e.time : ''}`).join(' · ')}</div></div>
+        <div class="plancount"><div class="v">${Math.max(0, PL.daysUntil(PL.EVENTS[0].date))}</div><div class="k">Tage bis Satellite</div></div>
+        <div class="plancount"><div class="v">${until > 0 ? until : 0}</div><div class="k">Tage bis Flight</div></div>
         <div class="plancount"><div class="v">${total}<span class="sub2">/${PL.DAYS}</span></div><div class="k">Einheiten erledigt</div></div>
         <div class="plancount"><div class="v">${planStreak()}</div><div class="k">Tage in Folge</div></div>
       </div>
@@ -2053,8 +2179,8 @@
         <h3>${before ? 'Der Plan startet am ' + PL.fmtDate(PL.PLAN_START) : 'Der Plan ist durch'}</h3>
         <p class="muted">${before
           ? 'Bis dahin einfach frei drillen — die Wiederholungsqueue läuft ohnehin.'
-          : 'Fünf Wochen sind vorbei. Ab hier zählt nur noch: jeden Tag die fällige Wiederholungsqueue leeren und vor jeder Session einmal in „Deine Fehler" schauen. Viel Erfolg in Rozvadov.'}</p>
-      </section>` + planWeeksHTML(worst);
+          : 'Fünf Wochen sind vorbei. Ab hier zählt nur noch: jeden Tag die fällige Wiederholungsqueue leeren und vor jeder Session einmal in „Deine Fehler" schauen. Nichts Neues mehr vor dem Flight — viel Erfolg in Graz.'}</p>
+      </section>` + planWeeksHTML(worst) + planEventsHTML();
       $$('#planOut .planjump').forEach(b => b.onclick = () => selectHand(b.dataset.hc));
       return;
     }
@@ -2067,7 +2193,7 @@
       <div class="planrow">
         <h3>Heute · ${s.date} — Woche ${s.week.n}, Tag ${s.dayOfWeek + 1}</h3>
         <span class="chip">${s.type.name}</span>
-        <span class="chip">30 Minuten</span>
+        <span class="chip">${s.event ? s.event.time + ' Turnier' : '30 Minuten'}</span>
       </div>
       <div class="planweektitle">${s.week.title}</div>
       ${(function () {
@@ -2094,12 +2220,12 @@
       <div class="planactions">
         <button class="primary" id="planStart">Setup übernehmen & starten ▸</button>
         <button class="ghost" id="planDone">${isDone ? '✓ erledigt — zurücknehmen' : 'Als erledigt markieren'}</button>
-        <span class="muted">${P.Plan.WEEKS[Math.floor(idx / 7)].n === 5 && !worst.length
+        <span class="muted">${!s.week.hands && !worst.length
         ? 'Noch zu wenig Daten für deine persönliche Fehlerliste — spiel erst ein paar Einheiten.' : ''}</span>
       </div>
     </section>`;
 
-    $('#planOut').innerHTML = head + today + planWeeksHTML(worst, idx) + planStructureHTML();
+    $('#planOut').innerHTML = head + today + planWeeksHTML(worst, idx) + planEventsHTML();
     $('#planStart').onclick = () => startPlanSession(s);
     if ($('#planTool')) $('#planTool').onclick = e => switchView(e.target.dataset.v);
     $('#planDone').onclick = () => {
@@ -2109,34 +2235,35 @@
     $$('#planOut .planjump').forEach(b => b.onclick = () => selectHand(b.dataset.hc));
   }
 
-  /** Die echte Blindstruktur von Tag 1 als Tiefentabelle. */
-  function planStructureHTML() {
-    const PL = P.Plan;
-    const rows = PL.depthTable().filter(r => r.day === 1).map(r => `
-      <tr class="lv-${r.band}">
-        <td>${r.lvl}</td><td>${r.sb.toLocaleString('de-DE')}/${r.bb.toLocaleString('de-DE')}</td>
-        <td>${r.ante.toLocaleString('de-DE')}</td>
-        <td><b>${r.depth.toFixed(1)}</b>bb</td>
-        <td>${{ deep: '60–100bb', mid: '40–60bb', short: '20–35bb', push: '12–20bb und darunter' }[r.band]}</td>
-      </tr>`).join('');
-    const lPush = PL.firstLevelOf('push'), lShort = PL.firstLevelOf('short'), lMid = PL.firstLevelOf('mid');
-    return `<section class="panel wide"><h3>Deine Turnierstruktur — Tag 1</h3>
-      <p class="muted" style="font-size:.88rem">${PL.START_CHIPS.toLocaleString('de-DE')} Startchips,
-        Ante = Big Blind, ${PL.LEVELS.length} Level über vier Tage. Gezeigt ist Tag 1; die Tiefe gilt
-        für einen Stack, der <i>nichts</i> gewinnt — sie zeigt, wann welche Phase spätestens kommt.
-        Die vollständige Sizing-Tabelle für alle Tage steht im Tab <b>Rechnen</b>.</p>
+  /** Die drei Termine, die Re-Entry-Regel und was zur Struktur noch fehlt. */
+  function planEventsHTML() {
+    const PL = P.Plan, R = PL.REENTRY;
+    const rows = PL.EVENTS.map(e => `<tr>
+        <td><b>${e.name}</b><br><span class="muted">${e.venue}</span></td>
+        <td>${PL.fmtDate(e.date)}${e.end ? '–' + PL.fmtDate(e.end) : ''}${e.time ? '<br>' + e.time : ''}</td>
+        <td>${e.buyIn}</td><td>${e.stackText}</td>
+        <td>${e.levelMin ? e.levelMin + ' min' : '—'}</td><td>${e.reentry}</td><td>${e.prize}</td></tr>`).join('');
+    return `<section class="panel wide"><h3>Deine Termine</h3>
       <table class="sizing struct">
-        <tr><th>Lvl</th><th>Blinds</th><th>Ante</th><th>Tiefe</th><th>entspricht Band</th></tr>
+        <tr><th>Turnier</th><th>Wann</th><th>Buy-in</th><th>Start</th><th>Level</th><th>Re-Entry</th><th>Es geht um</th></tr>
         ${rows}
       </table>
-      <div class="hpnote-sm">Das ist das Argument für Woche 4 in Zahlen: <b>ab Level ${lPush} von 19</b>
-        bist du im Push/Fold-Bereich, das sind die letzten neun Level. Tief (über 60bb) bist du nur
-        bis Level 5, ab Level ${lMid} mittel, ab Level ${lShort} kurz. Wer nur 40–100bb übt, trainiert
-        das erste Viertel von Tag 1.
-        <br><br>Zweite Bestätigung: <b>Ante = BB</b> über die ganze Struktur. Damit liegt das tote Geld
-        vor dem Flop konstant bei rund <b>2,5bb</b> (SB + BB + Ante) — genau der Wert, mit dem der
-        Range-Designer und die Shove-EV rechnen. Einzige Ausnahme ist Level 1 mit 100/300, dort sind
-        es 2,33bb.</div></section>`;
+      <div class="hpnote-sm"><b>Re-Entry-Regel für den Satellite</b> — vorher festgelegt, weil man sie
+        nach einem Bust am schlechtesten trifft:
+        <br>• höchstens <b>${R.maxShots} Shots</b>, egal was passiert;
+        <br>• ein Re-Entry nur, solange ein frischer Stack noch <b>${R.minBB}bb</b> hat — mit
+        ${R.startChips.toLocaleString('de-DE')} Chips also bis <b>Big Blind ${R.maxBigBlind.toLocaleString('de-DE')}</b>.
+        Darüber ist er sofort reines Push/Fold;
+        <br>• und vorher entscheiden: <b>Spielst du den Flight auch ohne Ticket?</b> Dann sind die
+        Satellite-Shots nur der Versuch, billiger reinzukommen.
+        <br><br>Warum die Grenze: Im Satellite gehen ${(R.rakeSat * 100).toFixed(1).replace('.', ',')} % jedes Buy-ins an das
+        Casino, im Flight ${(R.rakeMain * 100).toFixed(1).replace('.', ',')} %. Ohne Vorteil verliert man pro Shot rund €10.
+        Früh, mit tiefem Stack, hilft dir dein Vorteil gegen das Feld — spät ist es eine Lotterie mit
+        hohem Rake. Die ${R.minBB}bb sind eine Faustregel, keine Rechnung.
+        <br><br><b>Noch offen: die Blindstrukturen.</b> Weder Satellite noch Flight haben eine
+        veröffentlichte Tabelle. Bis sie vorliegt, zeigt der Plan keine Stacktiefe pro Level, und der
+        Tab <b>Rechnen</b> nimmt die Beträge aus der Struktur des King's Million — legbare Jetons,
+        aber nicht deine Level.</div></section>`;
   }
 
   /** Wochenübersicht mit allen 35 Tagen als Raster. */
@@ -2169,12 +2296,11 @@
       })()}
         </div>`;
     }).join('')}
-      <div class="hpnote-sm">Der Aufbau ist nicht beliebig: <b>Woche 1 geblockt</b> (immer derselbe
-        Spot-Typ) lernt die Regel am schnellsten, behält sie aber am schlechtesten. Ab
-        <b>Woche 3 gemischt</b> — das fühlt sich schlechter an, dein Score sinkt kurz, und genau
-        das trainiert das Unterscheiden statt das Auswendiglernen. <b>Woche 4</b> geht auf kurze
-        Stacks, weil sich jedes Live-Turnier unter 20bb entscheidet — das Band, das bisher in
-        deinen Einstellungen fehlte.</div>
+      <div class="hpnote-sm">Der Aufbau ist nicht beliebig: <b>Woche 1 beginnt unter 20bb</b>, weil
+        bei 20- und 30-Minuten-Leveln der Großteil beider Abende dort gespielt wird. <b>Woche 3
+        und 4 trennen zwei Bubbles</b>, die sich gleich anfühlen und gegensätzlich gespielt werden:
+        im Flight zählt dein Stack danach weiter, im Satellite ist jeder Chip über der Ticketgrenze
+        wertlos. <b>Woche 5</b> mischt alles und nimmt die Hände aus deiner eigenen Fehlerliste.</div>
     </section>`;
   }
 
@@ -2797,9 +2923,11 @@
     if (v === 'stats') renderStats();
     if (v === 'session') renderSession();
     if (v === 'eigene') renderOwn();
-    if (v === 'plan') renderPlan();
+    // Der Kurs (js/course.js) hat den CAPT-Plan ab 17.11.2026 abgelöst.
+    if (v === 'plan') { if (P.Course) P.Course.render($('#planOut')); else renderPlan(); }
+    if (v === 'verlauf' && !$('#rfRoot').children.length) P.RangeFlow.mount($('#rfRoot'));
     if (v === 'range' && !$('#rdOut').children.length) { runRangeDesigner(); scNewQuestion(); }
-    if (v === 'rechnen' && !$('#mtOpts').children.length) { mtScore(); mtNew(); renderSizings(); rfNew(); }
+    if (v === 'rechnen' && !$('#mtOpts').children.length) { mtScore(); mtNew(); renderSizings(); rfNew(); soNext(); }
     if (v === 'haende' && !$('#hpGrid').children.length) {
       renderHpGrid();
       selectHand(S.hp.sel);
@@ -2851,6 +2979,18 @@
   }
 
   function init() {
+    /* Schmale Schnittstelle für den Kurs (js/course.js): Tab wechseln, einen
+       Drill mit Setup starten, Statistik lesen. Mehr braucht er nicht. */
+    P.App = {
+      switchView,
+      startDrill(cfg) {
+        Object.assign(S.cfg, cfg || {});
+        try { localStorage.setItem('pt_cfg', JSON.stringify(S.cfg)); } catch (e) { }
+        cfgToUI(); switchView('trainer'); newHand();
+      },
+      stats: () => S.stats,
+      reviewDue: () => RV.due(S.review.items).length
+    };
     loadCfg(); cfgToUI(); updateReviewButton();
     $$('.tab').forEach(t => t.onclick = () => switchView(t.dataset.view));
     $('#btnSettings').onclick = openSettings;
@@ -2904,18 +3044,29 @@
     $('#rdRun').onclick = runRangeDesigner;
     $('#scNew').onclick = scNewQuestion;
     $('#rfNew').onclick = rfNew;
+    $('#soNew').onclick = soNext;
     const setRd = o => { for (const k in o) $(k).value = o[k]; runRangeDesigner(); };
     $('#rdBubbleNow').onclick = () => setRd({
       '#rdHero': 12, '#rdLeft': 100, '#rdBubble': 1, '#rdAvg': 25,
-      '#rdShorts': 10, '#rdShortBB': 3, '#rdBehind': 4
+      '#rdShorts': 10, '#rdShortBB': 3, '#rdBehind': 4, '#rdPay': 'mtt'
     });
     $('#rdShortest').onclick = () => setRd({
       '#rdHero': 5, '#rdLeft': 100, '#rdBubble': 1, '#rdAvg': 25,
-      '#rdShorts': 10, '#rdShortBB': 8, '#rdBehind': 4
+      '#rdShorts': 10, '#rdShortBB': 8, '#rdBehind': 4, '#rdPay': 'mtt'
     });
     $('#rdDeep').onclick = () => setRd({
       '#rdHero': 12, '#rdLeft': 400, '#rdBubble': 300, '#rdAvg': 40,
-      '#rdShorts': 40, '#rdShortBB': 8, '#rdBehind': 4
+      '#rdShorts': 40, '#rdShortBB': 8, '#rdBehind': 4, '#rdPay': 'mtt'
+    });
+    // Die beiden Satellite-Fälle, aus denen die Zahlen in Woche 4 stammen
+    // (js/tips.js). Wer hier etwas ändert, muss die Merksätze nachrechnen.
+    $('#rdSatBubble').onclick = () => setRd({
+      '#rdHero': 15, '#rdLeft': 12, '#rdBubble': 2, '#rdAvg': 12,
+      '#rdShorts': 2, '#rdShortBB': 5, '#rdBehind': 3, '#rdPay': 'sat'
+    });
+    $('#rdSatEarly').onclick = () => setRd({
+      '#rdHero': 12, '#rdLeft': 30, '#rdBubble': 25, '#rdAvg': 12,
+      '#rdShorts': 5, '#rdShortBB': 6, '#rdBehind': 3, '#rdPay': 'sat'
     });
     // Analyse-Presets
     const sel = $('#anPreset');

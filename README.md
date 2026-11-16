@@ -136,41 +136,44 @@ Diese Trennung ist auch im Code umgesetzt: `rangeAdv` steuert die Aggression `A`
 
 ## Trainingsplan — Tab *Plan*
 
-49 Tage à 30 Minuten bis zum **Super Main Event** des King's Million
-(€1.150, **€5.000.000 GTD**, 30.09.–06.10.2026, King's Resort Rozvadov). Das
-Festival startet schon am 16.09., der Plan zielt aber auf das Main Event — das
-sind zwei Wochen mehr Vorbereitung. Der Tab zeigt die heutige Einheit, den
-Countdown und die Serie; **„Setup übernehmen & starten"** schreibt die
+35 Tage à 30 Minuten (08.10.–11.11.2026) bis zur **CAPT Million** der Casinos
+Austria Poker Tour (€550, **€1.000.000 GTD**). Zwei Termine in derselben Woche:
+
+| Termin | Wann | Buy-in | Start | Level | Es geht um |
+|---|---|---|---|---|---|
+| Satellite-Starttag Graz | Di 10.11., 19:00 | €50+10 | 15.000 + 3.000 Gold Bonus | 20 min | mind. 5 Tickets à €550 |
+| CAPT-Million-Starttag Graz | Sa 14.11., 16:00 | €500+50 | 100.000 | 30 min | Top 10 % weiter, mind. €1.500 |
+| Finale | 28.–30.11., Casino Baden | — | Flight-Stack | — | €1M GTD |
+
+Der Tab zeigt die heutige Einheit, die Countdowns bis Satellite und Flight
+und die Serie; **„Setup übernehmen & starten"** schreibt die
 Wochen-Konfiguration in die Einstellungen und teilt sofort aus.
 
 | Woche | Thema | Setup |
 |---|---|---|
-| 1 | Prozess automatisieren | nur SRP · 40–60bb · Lernmodus **an** |
-| 2 | Lernmodus aus, Defense dazu | SRP + DEF · 40–100bb |
-| 3 | Alles gemischt, 3-Bet-Pots | alle Spot-Typen |
-| 4 | Kurze Stacks & Push/Fold | 12–35bb |
-| 5 | **ICM & Bubble** | 12–35bb + täglich Tab *Range* |
-| 6 | **Kopfrechnen & Sizings** | 20–60bb + täglich Tab *Rechnen* |
-| 7 | Simulation & Leak-Abbau | alles + gemischte Gegnertypen |
+| 1 | Push/Fold unter 20bb | 12–20bb · alle Spot-Typen außer Mehrweg |
+| 2 | Kurze Stacks & das Live-Feld | 12–35bb · Mehrweg · gemischte Gegner |
+| 3 | **ICM & die Bubble im Flight** | 12–35bb + täglich Tab *Range* (Turnier) |
+| 4 | **Satellite: nur das Ticket zählt** | 12–35bb + täglich Tab *Range* (Satellite) |
+| 5 | Generalprobe, Satellite am Dienstag | alles · eigene Fehlerhände |
 
-Der Aufbau folgt drei Befunden, nicht dem Bauchgefühl:
+Der Aufbau folgt dem, was die beiden Turniere verlangen:
 
-1. **Erst blocken, dann mischen.** Geblocktes Üben lernt schneller und behält
-   schlechter; Interleaving ist unangenehmer und gewinnt bei Behalten und
-   Transfer — besonders dort, wo ähnliche Kategorien unterschieden werden
-   müssen. Postflop ist zuerst Regelanwendung, danach Unterscheidung. Deshalb
-   Woche 1 geblockt, ab Woche 3 alles gemischt. Dein Score sinkt in Woche 3
-   kurzzeitig; das ist der Effekt, nicht ein Rückschritt.
-2. **Abruf statt Wiederlesen.** Jede Einheit beginnt mit der fälligen
-   Wiederholungsqueue, nicht mit Theorie. Der Lernmodus geht ab Woche 2 aus.
-3. **Live endet im Push/Fold.** Aus der echten Struktur: 50.000 Startchips bei
-   BB 300 sind 167bb. Aber **ab Level 11 von 19** ist ein Stack, der nichts
-   gewinnt, unter 20bb — die letzten neun Level von Tag 1 sind Push/Fold.
-   Woche 4 geht deshalb komplett auf kurze Stacks. Die vollständige
-   Tiefentabelle steht im Tab *Plan*.
+1. **Schnelle Level heißen kurze Stacks.** 20 Minuten im Satellite, 30 im
+   Flight — der Großteil beider Abende läuft unter 25bb. Deshalb beginnt der
+   Plan mit Push/Fold.
+2. **Drei verschiedene Bubbles.** Normales Turnier (Auszahlungskurve), Flight
+   (überleben zählt, der Stack danach aber weiter) und Satellite (gleiche
+   Tickets, Chips über der Linie wertlos). Woche 3 und 4 trennen sie, weil die
+   Call-Grenzen weit auseinanderliegen.
+3. **Abruf statt Wiederlesen.** Jede Einheit beginnt mit der fälligen
+   Wiederholungsqueue. Woche 5 nimmt die Hände aus der eigenen Statistik.
 
-Woche 7 hat keine feste Handliste: sie zieht die Handklassen mit deinem
-schlechtesten Score aus der eigenen Statistik.
+Am 10.11. ersetzt ein kurzer **Satellite-Tag** die normale Einheit: Presets
+rechnen, Re-Entry-Regel aufschreiben. Die Regel steht im Plan unter
+„Deine Termine": höchstens **3 Shots**, Re-Entry nur solange ein frischer Stack
+noch **25bb** hat (mit 18.000 Chips bis Big Blind 720). Die 25bb sind eine
+Faustregel; der Rake (16,7 % im Satellite gegen 9,1 % im Flight) ist exakt.
 
 **Laufend:** Tab *Statistik* → „Deine Fehler". Dort stehen die letzten 40 Fehler
 mit Board, Hand und Baseline, jeweils mit Sprung in den Steckbrief der Hand.
@@ -248,6 +251,21 @@ Modell ist identisch zu einem Exponential-Rennen, was den Aufwand auf eine
 Zufallszahl pro Spieler drückt. Gegen den Lehrbuchfall (3 Spieler 50/30/20)
 trifft es die von Hand gerechneten 38,39 / 32,75 / 28,86 auf zwei Stellen.
 
+**Satellite.** Mit *Auszahlung: Satellite* bekommen alle bezahlten Plätze dasselbe
+Ticket — Platz 1 ist nicht mehr wert als der letzte Ticketplatz. Die Presets
+„Satellite-Bubble" (12 übrig, 10 Tickets) und „Satellite früh" (30 übrig, 5 Tickets)
+zeigen, was das ändert (gerechnet mit 40.000 Simulationen, je Lauf ±1 Punkt):
+
+| 15bb gegen einen 5bb-Shove, 12 übrig, 10 bezahlt | Turnier | Satellite |
+|---|---|---|
+| Bubble-Faktor | 2,6 | **12,6** |
+| Flip braucht statt 50 % | 72 % | **93 %** |
+| Call-Range | 31 % | **13 %** |
+
+Weit vor der Bubble (30 übrig, 5 Tickets) liegen beide fast gleich (Call gegen
+6bb: 36 % gegen 35 %). Der Satellite ändert also nicht das ganze Turnier, sondern
+die Bubble.
+
 Die Call-Range des Gegners ist nicht gesetzt, sondern aus **seiner** ICM-Rechnung
 hergeleitet und mit deiner Shove-Range bis zum Stillstand iteriert. Damit das in
 Millisekunden geht, liegt die Equity aller 14.196 Handpaare vorberechnet in
@@ -283,15 +301,11 @@ Sizing-Tabelle: was ein 33-%-C-Bet auf Level 8 konkret in Chips bedeutet.
 
 ## Die Turnierstruktur
 
-Im Tab *Plan* steht die echte Struktur: 50.000 Startchips, **47 Level über vier
-Tage**, Ante = Big Blind durchgehend. Zwei Dinge fallen daran auf:
-
-- **Ab Level 11 von 19** ist ein Stack, der nichts gewinnt, unter 20bb. Tief
-  (über 60bb) bist du nur bis Level 5. Wer nur 40–100bb übt, trainiert das erste
-  Viertel von Tag 1.
-- Weil die Ante dem Big Blind entspricht, liegt das tote Geld vor dem Flop
-  konstant bei **2,5bb** (SB + BB + Ante). Genau mit diesem Wert rechnen der
-  Range-Designer und die Shove-EV.
+Die Blindstrukturen von Satellite und Flight sind noch nicht veröffentlicht.
+Bis sie vorliegen, zeigt der Plan keine Stacktiefe pro Level, und der Tab
+*Rechnen* nimmt die Beträge aus der letzten echten Struktur (King's Million:
+50.000 Startchips, 47 Level über vier Tage, Ante = Big Blind) — legbare
+Jetons, aber nicht die CAPT-Level.
 
 `P.Plan.structureAnomalies()` prüft die Progression auf Lücken — das hat einen
 echten Fehler gefunden, als in einer Zwischenfassung ein ganzer Turniertag
@@ -571,12 +585,12 @@ js/ranges.js        MTT-Preflop-Ranges + Spot-Bibliothek (13 Spots)  <- hier anp
 js/strategy.js      Heuristik: Aktion, Sizing, Bewertung, Range-Narrowing
 js/review.js        Leitner-Boxen für die Fehler-Wiederholung
 js/handprofile.js   Steckbriefe: Flop-Enumeration, Dominanz, Shove-EV, Archetypen
-js/plan.js          Trainingsplan + die echte Blindstruktur (47 Level, 4 Tage)
+js/plan.js          Trainingsplan CAPT Million, Termine, Re-Entry-Regel, Referenzstruktur
 js/mental.js        Pot Odds, MDF, Bluff-Break-even, Sizing-Tabellen
 js/eqtable.js       vorberechnete Equity aller 14.196 Handpaare (generiert)
-js/icm.js           Independent Chip Model, Bubble-Faktor, ICM-Push/Fold
+js/icm.js           Independent Chip Model, Bubble-Faktor, ICM-Push/Fold, Satellite
 js/app.js           Drill-Ablauf und sämtliche Ansichten
-test/smoke.js       346 Checks: Engine, Steckbriefe, ICM, Plan, Kopfrechnen
+test/smoke.js       658 Checks: Engine, Steckbriefe, ICM, Satellite, Plan, Kopfrechnen
 ```
 
 `js/eqtable.js` ist erzeugt, nicht von Hand geschrieben: 14.196 Handpaare à 8.000
