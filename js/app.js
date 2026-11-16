@@ -1558,6 +1558,22 @@
     return r;
   }
 
+  /** Die Shove-Range, gegen die gerechnet wird: optimal aus der ICM-Rechnung
+   *  oder eine engere Annahme. Enger als optimal wird nie WEITER gemacht —
+   *  ist die optimale Range schon enger als die gewählte, bleibt sie stehen. */
+  function scShoveSet(r) {
+    const IDX = P.ICM.classIndex();
+    const optPct = r.defend.shoverPct != null ? r.defend.shoverPct : r.push.pct;
+    const mode = ($('#scVs') && $('#scVs').value) || 'opt';
+    if (mode === 'opt') return { idx: r.shoveIdx, pct: optPct, opt: true, capped: false };
+    const want = +mode;
+    if (want >= optPct) return { idx: r.shoveIdx, pct: optPct, opt: true, capped: true, want };
+    return {
+      idx: P.ICM.topPct(want).map(h => IDX[h]).filter(i => i !== undefined),
+      pct: want, opt: false, capped: false, want
+    };
+  }
+
   function scNewQuestion() {
     if (S.sc.busy) return;
     const base = rdReadCfg();
@@ -1589,7 +1605,7 @@
     const q = S.sc.q, c = q.cfg;
     $('#scOut').innerHTML = `
       <div class="scask">${c.sat ? `<b>Satellite</b>, ${c.paid} Tickets. ` : ''}Noch <b>${c.left}</b> Spieler, <b>${c.bubble}</b> bis zur Bubble.
-        Du hast <b>${c.heroBB}bb</b>. Ein Shorty mit <b>${q.cfg.shortBB}bb</b> shovt vor dir.
+        Du hast <b>${c.heroBB}bb</b>. Ein Shorty mit <b>${q.cfg.shortBB}bb</b> shovt vor dir${$('#scVs').value !== 'opt' ? ` — er shovt nur die besten ${$('#scVs').value} %` : ''}.
         Du hältst ${miniCards(q.cards)} <b>${q.hand}</b>.</div>
       <div class="opts" id="scOpts"></div>`;
     const wrap = $('#scOpts');
@@ -1612,10 +1628,17 @@
     const q = S.sc.q; if (!q) return;
     const r = q.r, IDX = P.ICM.classIndex();
     const i = IDX[q.hand];
-    const eq = P.ICM.eqVsSet(i, r.shoveIdx);
+    const vs = scShoveSet(r);
+    const eqOf = (h, set) => P.ICM.eqVsSet(IDX[h], set);
+    const eq = P.ICM.eqVsSet(i, vs.idx);
     const need = r.defend.need, po = r.defend.potOdds;
-    const isCall = r.defend.range.includes(q.hand);
-    const chipCall = r.defend.chipRange.includes(q.hand);
+    // Gegen die optimale Range stehen die Ranges schon in r.defend; gegen eine
+    // engere wird mit derselben Schwelle neu sortiert.
+    const callOf = h => vs.opt ? r.defend.range.includes(h) : eqOf(h, vs.idx) >= need;
+    const chipOf = h => vs.opt ? r.defend.chipRange.includes(h) : eqOf(h, vs.idx) >= po;
+    const isCall = callOf(q.hand);
+    const chipCall = chipOf(q.hand);
+    const optCall = r.defend.range.includes(q.hand);
     /* Grenzfall: liegt die Equity dicht an der Schwelle, ist die Frage keine
        Wissensfrage mehr — dann zählt beides. Die Schwelle selbst ist
        simuliert und auf rund einen Punkt genau. */
@@ -1634,8 +1657,17 @@
         : `<div class="hpnote-sm">Auch ohne ICM wäre das kein Call: ${(eq * 100).toFixed(1)}% reichen
             nicht einmal für die reinen Pot Odds von ${(po * 100).toFixed(1)}%.</div>`;
 
+    const vsNote = vs.capped
+      ? `<div class="hpnote-sm">Die optimale Shove-Range ist hier mit ${vs.pct.toFixed(0)} % schon enger als
+          die gewählten ${vs.want} % — gerechnet wird deshalb gegen die optimale.</div>`
+      : !vs.opt && optCall !== isCall
+        ? `<div class="hpnote-sm">Gegen einen Shorty, der <b>optimal</b> shovt (${(r.defend.shoverPct != null ? r.defend.shoverPct : r.push.pct).toFixed(0)} %),
+            wäre das ein <b>${optCall ? 'Call' : 'Fold'}</b>. Hier entscheidet also, wie weit er wirklich shovt.</div>`
+        : '';
+    let callPct = 0;
     const grid = P.HandProfile.allHandClasses().map(hc => {
-      const d = r.defend.range.includes(hc), ch = r.defend.chipRange.includes(hc);
+      const d = callOf(hc), ch = chipOf(hc);
+      if (d) callPct += (hc.length === 2 ? 6 : hc[2] === 's' ? 4 : 12) / 13.26;
       const cl = d ? 'rdp' : ch ? 'rdc' : 'rdf';
       return `<button class="hpcell ${cl}${hc === q.hand ? ' scme' : ''}" title="${hc}">${hc}</button>`;
     }).join('');
@@ -1647,19 +1679,21 @@
         <small>Du: ${key === 'CALL' ? 'Call' : 'Fold'} · ${(S.stats.shove.right)} von ${S.stats.shove.total} richtig</small>
       </div>
       <div class="scnums">
-        <div><b>${(eq * 100).toFixed(1)}%</b><span>deine Equity gegen seine Shove-Range (${(r.defend.shoverPct != null ? r.defend.shoverPct : r.push.pct).toFixed(0)}% der Hände)</span></div>
+        <div><b>${(eq * 100).toFixed(1)}%</b><span>deine Equity gegen seine Shove-Range (${vs.pct.toFixed(0)}% der Hände, ${vs.opt ? 'optimal' : 'angenommen'})</span></div>
         <div><b>${(need * 100).toFixed(1)}%</b><span>nötig mit ICM</span></div>
         <div><b>${(po * 100).toFixed(1)}%</b><span>nötig nach reinen Pot Odds</span></div>
         <div><b>${r.metrics.bubbleFactor.toFixed(2)}</b><span>Bubble-Faktor</span></div>
       </div>
-      ${lehre}
+      ${lehre}${vsNote}
       <div class="hpgridwrap" style="margin-top:.6rem"><div class="hpgrid">${grid}</div></div>
       <div class="hplegend">
-        <span><i style="background:var(--acc2)"></i>callen (${r.defend.pct.toFixed(1)}%)</span>
+        <span><i style="background:var(--acc2)"></i>callen (${callPct.toFixed(1)}%)</span>
         <span><i style="background:var(--warn)"></i>nur ohne ICM ein Call</span>
         <span><i style="background:#1b2621"></i>folden</span>
       </div>
-      <div class="hpnote-sm">${r.defend.shoverPct != null
+      <div class="hpnote-sm">${!vs.opt
+        ? `Seine Shove-Range ist eine Annahme: die stärksten ${vs.pct} % der Hände. Die nötige Equity kommt weiter aus der ICM-Rechnung.`
+        : r.defend.shoverPct != null
         ? 'Seine Shove-Range kommt aus derselben ICM-Rechnung mit ihm als Held.'
         : 'Er deckt dich — als seine Shove-Range wird die eines gleich großen Stacks angesetzt.'}
         Gerechnet mit ${SC_SIMS.toLocaleString('de-DE')} ICM-Simulationen; die Schwelle schwankt dadurch um
@@ -3043,6 +3077,9 @@
     /* --- Range-Designer --- */
     $('#rdRun').onclick = runRangeDesigner;
     $('#scNew').onclick = scNewQuestion;
+    // Auswahl merken (nur Bequemlichkeit, ohne Speicher geht es mit "optimal" los)
+    try { const v = localStorage.getItem('pt.sc.vs'); if (v && $('#scVs').querySelector(`option[value="${v}"]`)) $('#scVs').value = v; } catch (e) { }
+    $('#scVs').onchange = () => { try { localStorage.setItem('pt.sc.vs', $('#scVs').value); } catch (e) { } };
     $('#rfNew').onclick = rfNew;
     $('#soNew').onclick = soNext;
     const setRd = o => { for (const k in o) $(k).value = o[k]; runRangeDesigner(); };
