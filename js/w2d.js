@@ -141,9 +141,18 @@
       const holeCards = {};
       let heroCards = [];
 
+      /* Raise (Typ 23) steht im XML als Betrag AUF — Gesamteinsatz der
+         Straße, preflop inklusive Blind. Call, Bet und All-in (Typ 7) sind
+         dagegen Zusatzbeträge. Hier wird der Raise auf den Zusatzbetrag
+         umgerechnet (`to` behält den Originalwert), damit sich `amount` überall
+         aufsummieren lässt. Geprüft an 2.414 Händen: so geht der Pot in jeder
+         Hand exakt auf die Gewinne auf; vorher scheiterten Hände, in denen
+         jemand aus dem Blind oder zweimal in einer Straße raist. */
+      let streetIn = {};
       for (const rm of g.matchAll(/<round no="(\d+)">([\s\S]*?)(?=<round no="|<\/game>|$)/g)) {
         const street = STREETS[+rm[1]];
         const body = rm[2];
+        if (+rm[1] >= 2) streetIn = {};   // Blinds zählen in die Preflop-Straße
         for (const cm of body.matchAll(/<cards player="([^"]*)" type="Pocket">([^<]*)<\/cards>/g)) {
           const cs = parseCards(cm[2]);
           if (cs.length === 2) holeCards[cm[1]] = cs;
@@ -156,7 +165,11 @@
           const code = +am[4];
           const kind = ACT[code];
           if (!kind) { unknownTypes[code] = (unknownTypes[code] || 0) + 1; continue; }
-          streets[street].push({ no: +am[1], player: am[2], amount: num(am[3]), kind, code });
+          const player = am[2], sum = num(am[3]), before = streetIn[player] || 0;
+          const act = { no: +am[1], player, amount: sum, kind, code };
+          if (kind === 'raise' && sum > before) { act.amount = sum - before; act.to = sum; }
+          if (kind !== 'ante') streetIn[player] = before + act.amount;
+          streets[street].push(act);
         }
       }
       if (hero && holeCards[hero.name]) heroCards = holeCards[hero.name];

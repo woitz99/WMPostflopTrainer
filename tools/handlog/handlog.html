@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hand-Logbuch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: eine schmale Spalte, gedacht zum Andocken neben dem Pokerclient */
+:root{
+  --bg:#eef2ef; --surface:#ffffff; --sunk:#e4eae6; --ink:#16201a; --muted:#56655c; --line:#d3dbd6;
+  --felt:#1d6646; --felt-ink:#ffffff; --felt-soft:#d6ebe0;
+  --warn:#a85410; --warn-soft:#fbe9d6; --bad:#b3261e; --bad-soft:#f8dcd9; --good:#2b7a4b;
+  --suit-s:#16201a; --suit-h:#c62828; --suit-d:#1f5fbf; --suit-c:#2b7a4b;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0e1411; --surface:#161f1a; --sunk:#1c2721; --ink:#e4ebe6; --muted:#93a39a; --line:#2a3731;
+  --felt:#3fa676; --felt-ink:#0b120e; --felt-soft:#1d3a2b;
+  --warn:#e8a05a; --warn-soft:#3a2a17; --bad:#f07468; --bad-soft:#3d1d1a; --good:#5cc28a;
+  --suit-s:#e4ebe6; --suit-h:#f07468; --suit-d:#6aa3f0; --suit-c:#5cc28a; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:760px;margin:0 auto;padding:12px 14px 40px}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:12px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:24px;margin:0;line-height:1}
+.live{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.live.on i{background:var(--good);box-shadow:0 0 0 3px var(--felt-soft)}
+.spacer{flex:1}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 11px;min-height:34px}
+button:hover{border-color:var(--muted)}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.chip:focus-within{outline:2px solid var(--felt);outline-offset:2px}
+button.primary{background:var(--felt);color:var(--felt-ink);border-color:var(--felt);font-weight:700}
+button.danger{color:var(--bad)}
+button.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+select,input[type=text],input[type=number],textarea{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:6px 9px;min-height:34px;min-width:0}
+textarea{width:100%;resize:vertical;min-height:78px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+.label{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stat{background:var(--sunk);border-radius:8px;padding:7px 9px;min-width:0}
+.stat b{display:block;font-family:var(--f-display);font-weight:700;font-size:22px;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stat span{font-size:12px;color:var(--muted)}
+.meter{height:6px;background:var(--sunk);border-radius:99px;margin-top:9px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--felt)} .meter.warn i{background:var(--warn)} .meter.bad i{background:var(--bad)}
+.banners{display:grid;gap:7px;margin-top:9px}
+.banner{border-radius:8px;padding:8px 11px;font-size:14px}
+.banner strong{font-family:var(--f-display);font-size:16px;letter-spacing:.02em;margin-right:6px}
+.banner.warn{background:var(--warn-soft);color:var(--warn)} .banner.bad{background:var(--bad-soft);color:var(--bad)} .banner.info{background:var(--felt-soft)}
+.clock{font-family:var(--f-mono);font-weight:600}
+.tlist{display:grid;gap:5px;margin-top:10px}
+.t{display:flex;gap:8px;align-items:center;font-size:13.5px;flex-wrap:wrap}
+.t .n{font-weight:700;flex:1 1 160px;min-width:0;overflow-wrap:anywhere}
+.t .m{color:var(--muted);font-variant-numeric:tabular-nums}
+.pill{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;border-radius:99px;padding:1px 8px;white-space:nowrap}
+.pill.run{background:var(--felt);color:var(--felt-ink)} .pill.bust{background:var(--bad-soft);color:var(--bad)} .pill.done{background:var(--line)} .pill.re{background:var(--warn-soft);color:var(--warn)}
+
+.hand{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
+.hand.new{animation:pop 1.2s ease-out}
+@keyframes pop{from{box-shadow:0 0 0 3px var(--felt)}to{box-shadow:0 0 0 0 transparent}}
+.hhead{display:grid;grid-template-columns:44px auto minmax(0,1fr) auto;gap:4px 10px;align-items:center;width:100%;text-align:left;border:0;border-radius:0;background:transparent;padding:9px 11px;min-height:0}
+.hhead time{font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.cards{font-family:var(--f-mono);font-weight:600;font-size:16px;white-space:nowrap}
+.board{font-family:var(--f-mono);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hmeta{font-size:12.5px;color:var(--muted);grid-column:2/4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res{font-family:var(--f-display);font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.res.plus{color:var(--good)} .res.minus{color:var(--bad)}
+.badge{grid-column:4;justify-self:end;font-size:11.5px;border-radius:99px;padding:0 7px;background:var(--felt-soft);white-space:nowrap}
+.s-s{color:var(--suit-s)} .s-h{color:var(--suit-h)} .s-d{color:var(--suit-d)} .s-c{color:var(--suit-c)}
+.hbody{border-top:1px solid var(--line);padding:10px 11px 12px;display:grid;gap:10px}
+.street{font-size:13.5px;line-height:1.6}
+.street b{font-family:var(--f-display);font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:13px;margin-right:6px}
+.street .pot{color:var(--muted);font-size:12px;margin-right:6px;white-space:nowrap}
+.hbody>*{min-width:0}
+.act{white-space:nowrap}
+.act.fold{color:var(--muted)}
+.act.allin{color:var(--bad);font-weight:700}
+.act.me{font-weight:700;background:var(--felt-soft);border-radius:4px;padding:0 4px}
+.sep{color:var(--muted);margin:0 4px}
+.notetext{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;background:var(--sunk);border-radius:8px;padding:7px 10px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{position:relative;display:inline-flex}
+.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip span{border:1px solid var(--line);border-radius:99px;padding:3px 10px;font-size:13px;cursor:pointer;user-select:none;background:var(--surface)}
+.chip input:checked+span{background:var(--felt);color:var(--felt-ink);border-color:var(--felt)}
+.chips.leak .chip input:checked+span{background:var(--warn);color:var(--surface);border-color:var(--warn)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hint{font-size:12.5px;color:var(--muted)}
+.tags{display:flex;flex-wrap:wrap;gap:4px}
+.tag{font-size:12px;border-radius:99px;padding:1px 8px;background:var(--sunk);color:var(--muted)}
+.tag.leak{background:var(--warn-soft);color:var(--warn)}
+.free{border-left:3px solid var(--felt)}
+.empty{color:var(--muted);padding:6px 2px}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:10px 12px;margin-bottom:12px}
+kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:var(--ink);color:var(--bg);padding:7px 13px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.hand.new{animation:none}*{transition:none!important}}
+@media(max-width:440px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="brand">Hand-Logbuch</h1>
+    <span class="live" id="live"><i></i><span id="liveTxt">verbinde …</span></span>
+    <span class="spacer"></span>
+    <select id="daySel" aria-label="Abend wählen"></select>
+  </header>
+  <div id="err" class="err" hidden></div>
+
+  <section class="card" id="statusCard">
+    <h2 class="label">Abend <span class="spacer"></span><label class="hint" for="budget">Budget €</label><input type="number" id="budget" min="0" step="5" value="75" style="width:76px;min-height:28px;padding:2px 7px"></h2>
+    <div class="stats">
+      <div class="stat"><b id="stSpent">€0</b><span id="stBudget">von €75</span></div>
+      <div class="stat"><b id="stEntries">0</b><span>Entries</span></div>
+      <div class="stat"><b id="stHands">0</b><span>Hände</span></div>
+      <div class="stat"><b id="stNet">€0</b><span>Netto</span></div>
+    </div>
+    <div class="meter" id="meter"><i id="meterBar" style="width:0"></i></div>
+    <div class="banners" id="banners"></div>
+    <div class="tlist" id="tlist"></div>
+  </section>
+
+  <section class="card">
+    <h2 class="label">Jetzt notieren <span class="hint" style="text-transform:none;letter-spacing:0;font-family:var(--f-body)">wird nach Handende der Hand zugeordnet</span></h2>
+    <div class="row" style="flex-wrap:nowrap">
+      <input type="text" id="freeText" placeholder="z. B. „Er limpt jeden Button, River-Bet wäre Bluff“" style="flex:1" aria-label="Gedanke zur laufenden Hand">
+      <button class="primary" id="nowSave">Zur Hand</button>
+    </div>
+    <div class="row" style="margin-top:7px">
+      <div class="chips" id="nowChips"></div>
+      <span class="spacer"></span>
+      <select id="nowFile" hidden aria-label="Turnier für die Notiz"></select>
+      <button class="ghost" id="freeSave">Ohne Hand speichern</button>
+    </div>
+  </section>
+
+  <div class="row" style="margin:0 2px 8px">
+    <span class="label" style="margin:0">Hände</span><span class="spacer"></span>
+    <select id="filt" aria-label="Hände filtern">
+      <option value="action">Mit eigener Aktion</option>
+      <option value="all">Alle Hände</option>
+      <option value="noted">Mit Kommentar</option>
+      <option value="big">Große Pots ab 15 bb</option>
+      <option value="loss">Verlust ab 10 bb</option>
+    </select>
+  </div>
+  <div id="list"></div>
+  <p class="hint" id="footer" style="margin-top:14px"></p>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="/engine.js"></script>
+<script src="/w2d.js"></script>
+<script>
+(function(){
+const P=window.PT, W=P.W2D;
+const KINDS=[["review","Fürs Review"],["gedanke","Gedanke"],["read","Read Gegner"],["tilt","Gefühl / Tilt"],["frage","Frage an Claude"]];
+const LEAKS=[["bluff","Bluff ≥ ½ Stack"],["calldown","Call-down 1 Paar"],["raise","Mittlere Hand geraist"],["pre3b","Preflop gg 3-Bet/Shove"],["draw","Draw zu teuer"],["rivervalue","River-Value in Schreckkarte"]];
+const KL=Object.fromEntries(KINDS),LL=Object.fromEntries(LEAKS);
+const PAUSE_MS=15*60e3, REENTRY_MS=15*60e3, LIVE_MS=5*60e3, POLL_MS=3000;
+const $=id=>document.getElementById(id);
+const S={seenAt:new Map(),attaching:new Set(),editing:new Set(),day:null,today:null,files:[],parsed:new Map(),notes:{},open:new Set(),seen:new Set(),firstLoad:true,pending:false,drafts:{}};
+
+/* ---------- Hilfen ---------- */
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
+const eur=v=>(v<0?"−":"")+"€"+Math.abs(Math.round(v*100)/100).toLocaleString("de-AT",{maximumFractionDigits:2});
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fbb=x=>{const v=Math.round(x*10)/10;return v.toLocaleString("de-AT",{maximumFractionDigits:1})};
+const mmss=ms=>{const s=Math.max(0,Math.ceil(ms/1000));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")};
+const parseDate=s=>new Date(String(s).replace(" ","T")).getTime();
+const hhmm=s=>String(s).slice(11,16);
+function dayKey(ts){const d=new Date(ts);d.setHours(d.getHours()-5);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+const SUIT_SYM={c:"♣",d:"♦",h:"♥",s:"♠"};
+const cardHTML=c=>{const s=P.cardToStr(c);return s[0]+`<span class="s-${s[1]}">${SUIT_SYM[s[1]]}</span>`};
+const cardsHTML=cs=>cs.map(cardHTML).join("");
+const cardsTxt=cs=>cs.map(P.cardToStr).join("");
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove("on"),1800)}
+async function api(path,opt){const r=await fetch(path,opt);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.statusText);const ct=r.headers.get("content-type")||"";return ct.includes("json")?r.json():r.text()}
+
+/* ---------- Hand zusammenfassen ---------- */
+function summarize(h){
+  const pos=W.positionsOf(h).map, bb=h.bb||1, hero=h.hero;
+  const who=p=>p===hero?"Du"+(pos[p]?" ("+pos[p]+")":""):(pos[p]||p);
+  let pot=0;const contrib={};
+  // Reststack je Spieler: wer danach bei 0 steht, ist all-in — der Client
+  // schreibt einen Shove oft nur als "raise" (Typ 23), nicht als All-in.
+  const rest={};for(const p of h.players)rest[p.name]=p.chips;
+  for(const a of h.streets.blinds){pot+=a.amount;rest[a.player]=(rest[a.player]??0)-a.amount;if(a.kind!=="ante")contrib[a.player]=(contrib[a.player]||0)+a.amount}
+  const streets=[];let heroAct=false;const inHand=new Set();
+  for(const st of ["preflop","flop","turn","river"]){
+    const acts=h.streets[st]||[];
+    if(st!=="preflop"){for(const k in contrib)delete contrib[k]}
+    const cards=st==="flop"?h.board.flop:st==="turn"?h.board.turn:st==="river"?h.board.river:[];
+    if(!acts.length&&!cards.length)continue; // nach einem All-in kommen die Karten ohne Aktionen
+    const potStart=pot;
+    const items=acts.map(a=>{
+      contrib[a.player]=(contrib[a.player]||0)+a.amount;pot+=a.amount;
+      rest[a.player]=(rest[a.player]??0)-a.amount;
+      const me=a.player===hero;
+      if(me&&a.kind!=="fold")heroAct=true;
+      if(a.kind!=="fold")inHand.add(a.player);
+      const ai=a.amount>0&&rest[a.player]<=bb*0.01;
+      let t;
+      if(a.kind==="fold")t="fold";else if(a.kind==="check")t="check";
+      else if(a.kind==="call")t="call "+fbb(a.amount/bb)+(ai?" all-in":"");
+      else if(a.kind==="bet")t=(ai?"all-in ":"bet ")+fbb(a.amount/bb);
+      else if(a.kind==="raise")t=(ai?"all-in auf ":"raise auf ")+fbb(contrib[a.player]/bb);
+      else if(a.kind==="allin")t="all-in "+fbb(contrib[a.player]/bb);
+      else t=a.kind;
+      return{who:who(a.player),me,kind:ai?"allin":a.kind,t};
+    });
+    streets.push({st,potStart:potStart/bb,cards,items});
+  }
+  const line=streets.filter(s=>s.items.length).map(s=>s.st[0].toUpperCase()+":"+s.items.filter(i=>i.kind!=="fold"||i.me).map(i=>i.who+" "+i.t).join(", ")).join(" | ");
+  // Eine Bet, die keiner gecallt hat, geht zurück und gehört nicht zum Pot.
+  // Sonst zeigt "Bet 2,3, alle folden" einen Pot, in dem die eigene Bet doppelt steckt.
+  const tot=Object.values(h.invested||{}).sort((a,b)=>b-a);
+  const uncalled=tot.length>1?tot[0]-tot[1]:0;
+  // Stacks zu Handbeginn: du und jeder, der freiwillig mitgespielt hat
+  // (Blinds allein zählen nicht), dazu Karten, falls im Showdown gezeigt.
+  const players=h.players.filter(p=>p.name===hero||inHand.has(p.name)).map(p=>({
+    pos:pos[p.name]||"",me:p.name===hero,stackBB:p.chips/bb,cards:h.holeCards[p.name]&&p.name!==hero?h.holeCards[p.name]:[]}));
+  const opp=players.filter(p=>!p.me);
+  const effBB=heroAct&&opp.length?Math.min(h.heroStackBB,Math.max(...opp.map(p=>p.stackBB))):null;
+  return{pos:pos[hero]||"",stackBB:h.heroStackBB,netBB:h.heroNetBB,potBB:(pot-uncalled)/bb,streets,heroAct,line,players,effBB};
+}
+
+/* ---------- Daten laden ---------- */
+async function loadDays(){
+  const days=await api("/api/days");
+  S.today=dayKey(Date.now());
+  const opts=[...new Set([S.today,...days.map(d=>d.day)])].sort().reverse();
+  const n=Object.fromEntries(days.map(d=>[d.day,d.files]));
+  const sel=$("daySel");
+  sel.innerHTML=opts.map(d=>`<option value="${d}">${d===S.today?"Heute":new Date(d+"T12:00").toLocaleDateString("de-AT",{weekday:"short",day:"2-digit",month:"2-digit"})}${n[d]?" · "+n[d]+" Turnierdateien":""}</option>`).join("");
+  if(!S.day)S.day=S.today;sel.value=S.day;
+}
+async function poll(){
+  try{
+    const files=await api("/api/files?day="+S.day);
+    let changed=files.length!==S.files.length;
+    for(const f of files){
+      const p=S.parsed.get(f.code);
+      if(p&&p.mtime===f.mtime&&p.size===f.size)continue;
+      const xml=await api("/api/file/"+f.code);
+      const sess=W.parseSession(xml);
+      // Wann eine Hand zum ersten Mal in der Datei stand. Hände, die schon beim
+      // Laden da waren, bekommen 0: über sie weiß die Seite nicht, wann sie fertig wurden.
+      for(const h of sess.heroHands)if(!S.seenAt.has(h.gamecode))S.seenAt.set(h.gamecode,S.firstLoad?0:Date.now());
+      S.parsed.set(f.code,{mtime:f.mtime,size:f.size,sess});changed=true;
+    }
+    S.files=files;
+    if(S.firstLoad){S.notes=await api("/api/notes");changed=true}
+    if(await attachPending())changed=true;
+    $("live").className="live on";$("liveTxt").textContent=S.day===S.today?"liest live mit":"Archiv";$("err").hidden=true;
+    if(changed)requestRender();else renderStatus();
+  }catch(e){
+    $("live").className="live";$("liveTxt").textContent="keine Verbindung";
+    $("err").hidden=false;$("err").textContent="Der lokale Server antwortet nicht. Läuft das Fenster „Hand-Logbuch“ noch? ("+e.message+")";
+  }
+}
+
+/* ---------- Turniere und Abend ---------- */
+function tourneyState(){
+  const now=Date.now();const seenT={};
+  return S.files.map(f=>{
+    const p=S.parsed.get(f.code);const hh=p?p.sess.heroHands:[];const last=hh[hh.length-1];
+    const reentry=!!seenT[f.tournamentCode];seenT[f.tournamentCode]=true;
+    let status="offen",bustTs=0;
+    if(last&&last.heroChips+last.heroNet<=0){status="bust";bustTs=parseDate(last.startDate)}
+    else if(f.place&&f.place!=="N/A"){status="done"}
+    else if(now-f.mtime<LIVE_MS){status="run"}
+    const cash=f.win&&f.win!=="N/A"?euroNum(f.win):0;
+    // Ein Day 2 trägt im Kopf den Buy-in des Flights, bezahlt wurde er aber schon am Day 1.
+    const day2=/\bDay\s*[2-9]\b|\bTag\s*[2-9]\b/i.test(f.name);
+    const spent=day2?0:f.buyin+f.rebuys*f.rebuyCost+f.addons*f.addonCost;
+    return{...f,hands:hh.length,status,bustTs,reentry:reentry&&!day2,cash,spent,day2,startTs:parseDate(f.start),lastBB:last?last.heroStackBB:0};
+  });
+}
+function euroNum(s){let v=0;for(const m of String(s).matchAll(/([\d.]+(?:,\d+)?)/g))v+=parseFloat(m[1].replace(/\./g,"").replace(",","."))||0;return v}
+function renderStatus(){
+  const ts=tourneyState();const b=+$("budget").value||0;
+  const spent=ts.reduce((a,t)=>a+t.spent,0),cash=ts.reduce((a,t)=>a+t.cash,0);
+  const entries=ts.length+ts.reduce((a,t)=>a+t.rebuys,0);
+  $("stSpent").textContent=eur(spent);$("stBudget").textContent="von "+eur(b)+" Budget";
+  $("stEntries").textContent=entries;$("stHands").textContent=ts.reduce((a,t)=>a+t.hands,0);
+  const net=cash-spent;$("stNet").textContent=eur(net);$("stNet").style.color=net>0?"var(--good)":net<0?"var(--bad)":"";
+  $("meterBar").style.width=(b?Math.min(100,spent/b*100):0)+"%";
+  $("meter").className="meter"+(b&&spent>b?" bad":b&&spent>=.8*b?" warn":"");
+  $("tlist").innerHTML=ts.length?ts.slice().reverse().map(t=>{
+    const pill=t.status==="run"?'<span class="pill run">läuft</span>':t.status==="bust"?'<span class="pill bust">bust '+new Date(t.bustTs).toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"})+'</span>':t.status==="done"?'<span class="pill done">fertig</span>':'<span class="pill done">ruht</span>';
+    return `<div class="t"><span class="n">${esc(t.name)}</span>${t.reentry?'<span class="pill re">Re-Entry</span>':""}${pill}<span class="m">${hhmm(t.start)} · ${t.day2?"Day 2, kein Buy-in":eur(t.spent)} ·${t.hands} Hände${t.status==="run"?" · "+fbb(t.lastBB)+" bb":""}${t.cash?" · Cash "+eur(t.cash):""}</span></div>`;
+  }).join(""):'<p class="empty" style="margin:0">Noch keine Turnierdatei an diesem Abend. Sobald du im win2day-Client ein Turnier spielst, erscheint es hier nach der ersten Hand.</p>';
+  // Hinweise nur für den laufenden Abend
+  const out=[];
+  if(S.day===S.today){
+    const now=Date.now();
+    const lastBust=Math.max(0,...ts.map(t=>t.bustTs));
+    const startedAfter=ts.some(t=>t.startTs>lastBust);
+    if(lastBust&&!startedAfter&&now-lastBust<PAUSE_MS)out.push(`<div class="banner warn"><strong>Pause</strong>noch <span class="clock">${mmss(PAUSE_MS-(now-lastBust))}</span> bis zum nächsten Entry.</div>`);
+    const lastRe=Math.max(0,...ts.filter(t=>t.reentry).map(t=>t.startTs));
+    if(lastRe&&now-lastRe<REENTRY_MS)out.push(`<div class="banner info"><strong>Re-Entry-Phase</strong><span class="clock">${mmss(REENTRY_MS-(now-lastRe))}</span> Erste ~15 Hände: kein Stack-off ohne sehr starke Hand.</div>`);
+    const run=ts.filter(t=>t.status==="run").length;
+    if(run>1)out.push(`<div class="banner warn"><strong>${run} Tische</strong>Neben einem Ziel-Event spielst du nur einen Tisch.</div>`);
+  }
+  if(b&&spent>b)out.push(`<div class="banner bad"><strong>Budget überschritten</strong>${eur(spent-b)} über deinem Abendbudget.</div>`);
+  else if(b&&spent>=.8*b)out.push(`<div class="banner warn"><strong>Budget fast voll</strong>Noch ${eur(b-spent)} für heute.</div>`);
+  const html=out.join("");if($("banners").innerHTML!==html)$("banners").innerHTML=html;
+  renderNowFile();
+}
+
+/* ---------- Liste ---------- */
+function allItems(){
+  const items=[];
+  for(const f of S.files){const p=S.parsed.get(f.code);if(!p)continue;
+    for(const h of p.sess.heroHands)items.push({type:"hand",id:h.gamecode,ts:parseDate(h.startDate),h,file:f,tname:f.name})}
+  for(const n of Object.values(S.notes))if((n.free||n.pending)&&n.day===S.day)items.push({type:"free",id:n.id,ts:Date.parse(n.createdAt),n});
+  return items.sort((a,b)=>b.ts-a.ts||(b.id<a.id?-1:1));
+}
+function requestRender(){
+  const a=document.activeElement;
+  if(a&&$("list").contains(a)&&/^(TEXTAREA|INPUT|SELECT)$/.test(a.tagName)){S.pending=true;renderStatus();return}
+  render();
+}
+function noteTags(n){
+  const t=[...(n.tags||[]).map(k=>`<span class="tag">${esc(KL[k]||k)}</span>`),...(n.leaks||[]).map(k=>`<span class="tag leak">${esc(LL[k]||k)}</span>`)];
+  if(n.mood)t.push(`<span class="tag">Stimmung ${n.mood}/5</span>`);
+  return t.length?`<div class="tags">${t.join("")}</div>`:"";
+}
+function formHTML(id,n){
+  const d=S.drafts[id]||{text:n?n.text:"",tags:n?n.tags||[]:[],leaks:n?n.leaks||[]:[],mood:n?n.mood||0:0};
+  const chk=(arr,k)=>arr.includes(k)?" checked":"";
+  return `<div class="nform" data-id="${id}">
+    <textarea data-f="text" placeholder="Was hast du in der Hand gedacht? Was war der Plan, was hast du von ihm erwartet?">${esc(d.text)}</textarea>
+    <div class="chips" style="margin-top:7px">${KINDS.map(([k,l])=>`<label class="chip"><input type="checkbox" data-f="tag" value="${k}"${chk(d.tags,k)}><span>${l}</span></label>`).join("")}</div>
+    <div class="chips leak" style="margin-top:6px">${LEAKS.map(([k,l])=>`<label class="chip"><input type="checkbox" data-f="leak" value="${k}"${chk(d.leaks,k)}><span>${l}</span></label>`).join("")}</div>
+    <div class="row" style="margin-top:8px"><span class="hint">Stimmung</span><div class="chips">${[1,2,3,4,5].map(m=>`<label class="chip"><input type="radio" name="mood-${id}" data-f="mood" value="${m}"${+d.mood===m?" checked":""}><span>${m}</span></label>`).join("")}</div>
+    <span class="spacer"></span>${n?`<button class="danger ghost" data-act="del" data-id="${id}">Löschen</button>`:""}<button class="primary" data-act="save" data-id="${id}">Speichern</button></div>
+    <div class="hint" style="margin-top:4px"><kbd>Strg</kbd>+<kbd>Enter</kbd> speichert</div></div>`;
+}
+function handHTML(it){
+  const h=it.h,s=summarize(h),n=S.notes[it.id],open=S.open.has(it.id);
+  const res=Math.round(s.netBB*10)/10;
+  const resCls=res>0?"plus":res<0?"minus":"";
+  const board=h.boardAll.length?cardsHTML(h.boardAll):'<span class="hint">kein Flop</span>';
+  const isNew=!S.firstLoad&&!S.seen.has(it.id);S.seen.add(it.id);
+  const head=`<button class="hhead" data-act="toggle" data-id="${it.id}" aria-expanded="${open}">
+    <time>${hhmm(h.startDate)}</time><span class="cards">${h.heroCards.length?cardsHTML(h.heroCards):"–"}</span><span class="board">${board}</span>
+    <span class="res ${resCls}">${res>0?"+":""}${fbb(res)} bb</span>
+    <span class="hmeta">${esc(s.pos)} · ${fbb(s.stackBB)} bb${s.effBB!=null&&s.effBB<s.stackBB-0.05?" · eff. "+fbb(s.effBB)+" bb":""} · Pot ${fbb(s.potBB)} bb · ${esc(it.tname)}</span>${n?'<span class="badge">Notiz</span>':""}</button>`;
+  let body="";
+  if(open){
+    const streets=s.streets.map(st=>`<div class="street"><b>${st.st}</b>${st.cards.length?`<span class="cards" style="font-size:14px;margin-right:6px">${cardsHTML(st.cards)}</span>`:""}<span class="pot">Pot ${fbb(st.potStart)} bb</span>${st.items.map(i=>`<span class="act ${i.kind==="fold"?"fold":i.kind==="allin"?"allin":""} ${i.me?"me":""}">${esc(i.who)} ${esc(i.t)}</span>`).join(' <span class="sep">·</span> ')}</div>`).join("");
+    const stacks=s.players.length>1?`<div class="street stacks"><b>Stacks</b>${s.players.map(p=>`<span class="act${p.me?" me":""}">${p.me?"Du":esc(p.pos)}${p.me&&p.pos?" ("+esc(p.pos)+")":""} ${fbb(p.stackBB)} bb${p.cards.length?` <span class="cards" style="font-size:13.5px">${cardsHTML(p.cards)}</span>`:""}</span>`).join(' <span class="sep">·</span> ')}${s.effBB!=null?`<span class="pot" style="margin-left:6px">eff. ${fbb(s.effBB)} bb</span>`:""}</div>`:"";
+    body=`<div class="hbody">${stacks}${streets}${n&&!S.editing.has(it.id)&&!S.drafts[it.id]?`<div class="notetext">${esc(n.text||"")}</div>${noteTags(n)}<div class="row"><button data-act="edit" data-id="${it.id}">Bearbeiten</button><button class="danger ghost" data-act="del" data-id="${it.id}">Löschen</button></div>`:formHTML(it.id,n)}</div>`;
+  }
+  return `<article class="hand${isNew?" new":""}" data-id="${it.id}">${head}${body}</article>`;
+}
+function freeHTML(it){
+  const n=it.n;
+  return `<article class="hand free"><div class="hbody" style="border-top:0"><div class="row"><time class="hint" style="font-family:var(--f-mono)">${new Date(n.createdAt).toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"})}</time>${n.pending?'<span class="badge" style="grid-column:auto">wartet auf Handende</span>':""}<span class="spacer"></span><button class="ghost danger" data-act="del" data-id="${n.id}">Löschen</button></div><div class="notetext">${esc(n.text)}</div>${noteTags(n)}</div></article>`;
+}
+function render(){
+  S.pending=false;renderStatus();
+  const f=$("filt").value;let items=allItems();const newest=items.find(i=>i.type==="hand");const total=items.filter(i=>i.type==="hand").length;
+  items=items.filter(it=>{
+    if(it.type==="free")return f!=="big"&&f!=="loss";
+    if(S.notes[it.id]||S.open.has(it.id))return true;
+    if(it===newest)return true; // die neueste Hand immer zeigen, damit sichtbar ist, dass mitgelesen wird
+    const s=summarize(it.h);
+    if(f==="action")return s.heroAct;if(f==="noted")return false;
+    if(f==="big")return s.potBB>=15;if(f==="loss")return s.netBB<=-10;return true;
+  });
+  const shown=items.filter(i=>i.type==="hand").length;
+  $("list").innerHTML=items.length?items.map(it=>it.type==="hand"?handHTML(it):freeHTML(it)).join(""):`<p class="empty">${total?`${total} Hände da, keine passt zu diesem Filter. Wähl oben „Alle Hände“.`:"Hier erscheint jede Hand, sobald der Client sie gespeichert hat. Klick auf eine Hand, um den Ablauf zu sehen und einen Kommentar zu schreiben."}</p>`;
+  $("footer").textContent=total?`${shown} von ${total} Händen angezeigt. Kommentare werden in ${S.notesFile||"der Kommentar-Datei"} gespeichert.`:"";
+  S.firstLoad=false;
+}
+
+/* ---------- Kommentare speichern ---------- */
+function readForm(form){
+  return{text:form.querySelector('[data-f=text]').value.trim(),
+    tags:[...form.querySelectorAll('[data-f=tag]:checked')].map(i=>i.value),
+    leaks:[...form.querySelectorAll('[data-f=leak]:checked')].map(i=>i.value),
+    mood:+((form.querySelector('[data-f=mood]:checked')||{}).value||0)};
+}
+async function saveNote(id){
+  const form=document.querySelector(`.nform[data-id="${id}"]`);if(!form)return;
+  const d=readForm(form);
+  if(!d.text&&!d.tags.length&&!d.leaks.length){toast("Schreib zuerst etwas oder wähl ein Tag.");return}
+  const it=allItems().find(i=>i.id===id);if(!it)return;
+  const body=handNoteBody(it,d);
+  try{S.notes[id]=await api("/api/notes/"+id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    delete S.drafts[id];S.editing.delete(id);document.activeElement&&document.activeElement.blur();render();toast("Kommentar gespeichert")}
+  catch(e){toast("Speichern fehlgeschlagen: "+e.message)}
+}
+async function delNote(id){
+  try{await api("/api/notes/"+id,{method:"DELETE"});delete S.notes[id];delete S.drafts[id];render();toast("Gelöscht")}
+  catch(e){toast("Löschen fehlgeschlagen: "+e.message)}
+}
+/** Notiz zu einer Hand, mit den Eckdaten der Hand, damit sie auch ohne XML lesbar bleibt. */
+function handNoteBody(it,d){
+  const s=summarize(it.h),h=it.h,id=it.id;
+  return{...d,gamecode:id,sessionCode:it.file.code,tournament:it.tname,handStart:h.startDate,day:S.day,
+    heroCards:cardsTxt(h.heroCards),board:cardsTxt(h.boardAll),position:s.pos,stackBB:Math.round(s.stackBB*10)/10,
+    netBB:Math.round(s.netBB*10)/10,potBB:Math.round(s.potBB*10)/10,line:s.line,
+    effBB:s.effBB!=null?Math.round(s.effBB*10)/10:null,
+    players:s.players.map(p=>({pos:p.pos,me:p.me,stackBB:Math.round(p.stackBB*10)/10,cards:cardsTxt(p.cards)})),
+    createdAt:(S.notes[id]&&S.notes[id].createdAt)||new Date().toISOString()};
+}
+const putNote=(id,body)=>api("/api/notes/"+id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+
+/* ---------- Notizen während der Hand ----------
+   Die Datei bekommt eine Hand erst nach Handende. Eine Notiz von Zeitpunkt T
+   gehört zur letzten Hand, die vor T begonnen hat. Zugeordnet wird erst, wenn
+   sicher ist, dass diese Hand schon in der Datei steht: Sie ist nach T
+   aufgetaucht, eine spätere Hand steht schon da, oder das Turnier ist vorbei. */
+const nowChipDefs=[["review","Fürs Review","tag"],["read","Read Gegner","tag"],["tilt","Gefühl / Tilt","tag"],["bluff","Bluff ≥ ½ Stack","leak"]];
+function nowChipsHTML(){return nowChipDefs.map(([k,l,t])=>`<label class="chip"><input type="checkbox" data-now="${t}" value="${k}"><span>${l}</span></label>`).join("")}
+function runningFiles(){return tourneyState().filter(t=>t.status==="run")}
+function renderNowFile(){
+  const run=runningFiles(),sel=$("nowFile");
+  sel.hidden=run.length<2;
+  const sig=run.map(t=>t.code).join(",");if(sel.dataset.sig===sig)return;sel.dataset.sig=sig; // offenes Dropdown nicht jede Sekunde neu bauen
+  if(run.length>=2){const cur=sel.value;sel.innerHTML=run.map(t=>`<option value="${t.code}">${esc(t.name)}</option>`).join("");if(run.some(t=>t.code===cur))sel.value=cur}
+}
+function readNow(){
+  return{text:$("freeText").value.trim(),
+    tags:[...document.querySelectorAll('#nowChips [data-now=tag]:checked')].map(i=>i.value),
+    leaks:[...document.querySelectorAll('#nowChips [data-now=leak]:checked')].map(i=>i.value)};
+}
+function clearNow(){$("freeText").value="";document.querySelectorAll('#nowChips input').forEach(i=>i.checked=false)}
+async function saveNow(){
+  const d=readNow();if(!d.text){$("freeText").focus();return}
+  const ts=Date.now(),id="vorab-"+ts,run=runningFiles();
+  const sessionCode=run.length>=2?$("nowFile").value:run.length===1?run[0].code:(S.files.length?S.files[S.files.length-1].code:null);
+  try{S.notes[id]=await putNote(id,{...d,pending:true,day:S.day,ts,sessionCode,createdAt:new Date(ts).toISOString()});
+    clearNow();render();toast("Notiert, kommt nach Handende zur Hand")}catch(e){toast("Speichern fehlgeschlagen: "+e.message)}
+}
+async function attachPending(){
+  const pend=Object.values(S.notes).filter(n=>n.pending&&n.day===S.day&&!S.attaching.has(n.id));
+  if(!pend.length)return false;
+  const ts=tourneyState();let done=false;
+  for(const n of pend){
+    const files=S.files.filter(f=>!n.sessionCode||f.code===n.sessionCode);
+    let cand=null,candFile=null,later=false;
+    for(const f of files){const p=S.parsed.get(f.code);if(!p)continue;
+      for(const h of p.sess.heroHands){const st=parseDate(h.startDate);
+        if(st<=n.ts){if(!cand||st>=parseDate(cand.startDate)){cand=h;candFile=f}}else later=true}}
+    if(!cand)continue;
+    const t=ts.find(x=>x.code===candFile.code);
+    const over=t&&t.status!=="run";
+    if(!((S.seenAt.get(cand.gamecode)||0)>=n.ts||later||over))continue;
+    S.attaching.add(n.id);
+    const it={type:"hand",id:cand.gamecode,h:cand,file:candFile,tname:candFile.name};
+    const old=S.notes[cand.gamecode];
+    const stamp=new Date(n.ts).toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    const after=over&&!later&&t&&n.ts>t.mtime; // nach dem letzten Speichern der Datei geschrieben
+    const line=`[${stamp}, ${after?"nach der Hand":"während der Hand"}] ${n.text}`;
+    const d={text:old&&old.text?old.text+"\n"+line:line,
+      tags:[...new Set([...(old&&old.tags||[]),...(n.tags||[])])],
+      leaks:[...new Set([...(old&&old.leaks||[]),...(n.leaks||[])])],
+      mood:old&&old.mood||0,live:[...(old&&old.live||[]),{ts:n.ts,text:n.text}]};
+    try{
+      S.notes[cand.gamecode]=await putNote(cand.gamecode,handNoteBody(it,d));
+      await api("/api/notes/"+n.id,{method:"DELETE"});delete S.notes[n.id];done=true;
+    }catch(e){console.error(e)}
+    S.attaching.delete(n.id);
+  }
+  return done;
+}
+async function saveFree(){
+  const d=readNow();if(!d.text){$("freeText").focus();return}
+  const id="frei-"+Date.now();
+  try{S.notes[id]=await putNote(id,{...d,free:true,day:S.day,createdAt:new Date().toISOString()});
+    clearNow();render();toast("Notiert")}catch(e){toast("Speichern fehlgeschlagen: "+e.message)}
+}
+
+/* ---------- Ereignisse ---------- */
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]");if(!b)return;const id=b.dataset.id;
+  if(b.dataset.act==="toggle"){S.open.has(id)?S.open.delete(id):S.open.add(id);render();
+    if(S.open.has(id)){const t=document.querySelector(`.nform[data-id="${id}"] textarea`);t&&t.focus({preventScroll:true})}}
+  else if(b.dataset.act==="edit"){S.editing.add(id);render();const t=document.querySelector(`.nform[data-id="${id}"] textarea`);t&&t.focus()}
+  else if(b.dataset.act==="save")saveNote(id);
+  else if(b.dataset.act==="del")delNote(id);
+});
+document.addEventListener("input",e=>{const form=e.target.closest(".nform");if(form)S.drafts[form.dataset.id]=readForm(form)});
+document.addEventListener("change",e=>{const form=e.target.closest(".nform");if(form)S.drafts[form.dataset.id]=readForm(form)});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){const form=e.target.closest&&e.target.closest(".nform");if(form){e.preventDefault();saveNote(form.dataset.id)}}
+});
+$("list").addEventListener("focusout",()=>setTimeout(()=>{if(S.pending&&!$("list").contains(document.activeElement))render()},0));
+$("nowChips").innerHTML=nowChipsHTML();
+$("nowSave").onclick=saveNow;
+$("freeSave").onclick=saveFree;
+$("freeText").addEventListener("keydown",e=>{if(e.key==="Enter")saveNow()});
+$("filt").onchange=render;
+$("budget").value=ls("hl-budget")||75;
+$("budget").oninput=()=>{ls("hl-budget",$("budget").value);renderStatus()};
+$("daySel").onchange=()=>{S.day=$("daySel").value;S.files=[];S.firstLoad=true;S.seen.clear();S.open.clear();poll()};
+
+(async()=>{
+  try{const st=await api("/api/status");S.notesFile=st.notesFile;
+    if(!st.found){$("err").hidden=false;$("err").textContent="Kein win2day-Ordner mit Handhistorien gefunden. Starte den Server mit HANDLOG_HH=<Ordner>."}
+    await loadDays();}catch(e){}
+  await poll();
+  setInterval(()=>{if(S.day===S.today)poll()},POLL_MS);
+  setInterval(()=>{if(S.day===S.today)renderStatus()},1000);
+  setInterval(()=>{const t=dayKey(Date.now());if(t!==S.today)loadDays()},60e3);
+})();
+})();
+</script>
+</body>
+</html>
