@@ -1,0 +1,20 @@
+[package]
+name = "pt-solver-batch"
+version = "0.1.0"
+edition = "2021"
+publish = false
+# postflop-solver steht unter AGPL-3.0-or-later; dieses kleine Batch-Programm
+# ebenso. Nur für den privaten Gebrauch gebaut.
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+# Gepinnt: der Autor warnt, dass sich die API ohne Versionswechsel ändert.
+# Ohne "bincode" (Spielstände speichern brauchen wir nicht): die Bibliothek
+# verlangt bincode 2.0.0-rc.3, Cargo zieht aber 2.0.1 mit geänderter API —
+# damit kompiliert sie nicht mehr. "rayon" bleibt: mehrere Kerne.
+postflop-solver = { git = "https://github.com/b-inary/postflop-solver", branch = "main", default-features = false, features = ["rayon"] }
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "thin"

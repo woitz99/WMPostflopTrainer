@@ -1,0 +1,6 @@
+# Build-Ausgabe und Zwischenstände des Batch-Solvers
+target/
+out-full/
+spots.txt
+nachtlauf.log
+*.json.tmp
