@@ -20,10 +20,10 @@
 global.window = {};
 const fs = require('fs'), path = require('path');
 const base = path.join(__dirname, '..', '..', 'js');
-for (const f of ['engine.js', 'ranges.js', 'strategy.js', 'w2d.js', 'rangeflow.js']) {
+for (const f of ['engine.js', 'ranges.js', 'strategy.js', 'w2d.js', 'rangeflow.js', 'preflopdrill.js']) {
   eval(fs.readFileSync(path.join(base, f), 'utf8'));
 }
-const P = global.window.PT, W = P.W2D, RF = P.RangeFlow;
+const P = global.window.PT, W = P.W2D, D = P.PreflopDrill;
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const HOME = process.env.USERPROFILE || process.env.HOME;
 const OUT = arg('--out', path.join(HOME, 'Documents', 'Poker-Handlog'));
@@ -93,26 +93,11 @@ for (const p of ['EP', 'MP', 'CO', 'BTN', 'SB']) {
   openModel[p] = { short: setOf(P.adjustForStack(P.RFI[p], 'short')), mid: setOf(P.RFI[p]) };
 }
 
-/** Call- und 3-Bet-Range für hero gegen das Open von v. Lücken: nächstliegende Range, markiert. */
+/* Call- und 3-Bet-Ranges: dieselben wie im Preflop-Drill (js/preflopdrill.js),
+   inklusive genäherter Lücken und SB-Regel (3-Bet oder Fold). */
 function vsModel(h, v, band) {
-  let ch = h, cv = v; const note = [];
-  if ((h === 'EP' || h === 'MP') && (v === 'EP' || v === 'MP')) { ch = 'CO'; cv = 'EP'; note.push('genähert (CO gegen EP)'); }
-  const c = RF.preflopRanges('vOpen_hCall', ch, cv, band).hero, t = RF.preflopRanges('vOpen_h3b', ch, cv, band).hero;
-  let call = c && c.str, tb = t && t.str, srcC = c && c.src, approxC = c && c.approx, src3 = t && t.src, approx3 = t && t.approx;
-  if (!tb && ch === 'CO') { tb = P.THREEBET.BTN_vs_EP; src3 = '3-Bet BTN_vs_EP'; approx3 = true; }
-  if (h === 'SB' && (v === 'EP' || v === 'MP')) { tb = P.THREEBET.BTN_vs_EP; src3 = '3-Bet BTN_vs_EP'; approx3 = true; }
-  // Das Modell spielt aus dem SB 3-Bet oder Fold. Als "spielbar" gilt dort,
-  // was der Button cold-callen würde — aber eben als 3-Bet.
-  let sb = false;
-  if (h === 'SB') {
-    sb = true; approxC = false;
-    call = (v === 'CO' || v === 'BTN') ? P.IP_FLAT.BTN_vs_CO : P.IP_FLAT.BTN_vs_MP;
-    srcC = 'keine — SB spielt 3-Bet oder Fold; spielbar = Button-Cold-Call-Range';
-  }
-  return {
-    sb, call: setOf(call), tb: setOf(tb),
-    src: `Call: ${srcC || '—'}${approxC ? ' (genähert)' : ''} · 3-Bet: ${src3 || '—'}${approx3 ? ' (genähert)' : ''}${note.length ? ' · ' + note.join(', ') : ''}`
-  };
+  const m = D.vsModel(h, v, band);
+  return { sb: m.sb, call: [...m.call], tb: [...m.tb], src: m.src };
 }
 const vsM = {};
 for (const [p, o, , , eff] of vs) { const k = `${p}|${o}|${bandOf(eff)}`; if (!vsM[k]) vsM[k] = vsModel(p, o, bandOf(eff)); }

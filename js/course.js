@@ -9,8 +9,11 @@
      - Abweichung im Rate-Modus auf Solver-Flops (Ziel ≤ 8 Punkte),
      - keinen Stack-Bluffs > 50 % ohne Equity/Blocker.
 
-   Aufbau jeder Einheit (60 min): Wiederholung 10 · Lektion + Fragen 20 ·
-   Auftrag 25 · Check-in 5. Die Blöcke folgen den Leaks aus den Reviews
+   Aufbau jeder Einheit (60 min): Wiederholung 5 · Preflop-Drill 15 ·
+   Lektion + Fragen 20 · Auftrag 15 · Check-in 5. Der Preflop-Drill
+   (js/preflopdrill.js) kam am 17.11. dazu, nach der Auswertung der eigenen
+   Opens und Calls (tools/preflop): fast überall zu loose. Die 15 Minuten
+   gingen von der Wiederholung und den Trainer-Aufträgen ab. Die Blöcke folgen den Leaks aus den Reviews
    (siehe Coaching-Protokoll coach/protokoll.md). Block 1 ist ausformuliert;
    die späteren Blöcke schreibt der Coach nach dem jeweiligen Block-Review,
    damit sie auf die Ergebnisse reagieren können.
@@ -185,9 +188,10 @@
       example: () => vs3bet({ hero: 'Ac7d', heroPos: 'MP', villPos: 'CO', stack: 50, range: 'IP3_vs_early', mult: 4 }),
       quiz: { n: 6, gens: [gen3betEarly, gen3betCO].map(robust) },
       tasks: [
-        { t: 'Wiederholung: fällige Fehler im Trainer abarbeiten (⟳ oben).', min: 10 },
-        { t: 'Stack-off-Check im Tab *Rechnen*: die beiden 3-Bet-Spots (JTo, KJo, QJs) durchgehen und die EV-Tabelle lesen.', min: 15, jump: { view: 'rechnen' } },
-        { t: 'Im Hand-Logbuch die letzten beiden Sessions nach Händen durchsuchen, in denen du eine 3-Bet gecallt hast. Eine notieren.', min: 10, jump: { url: 'http://127.0.0.1:8139' } }
+        { t: 'Wiederholung: fällige Fehler im Trainer abarbeiten (⟳ oben).', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), gemischt — so viele Fragen, wie in 15 Minuten gehen.', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Stack-off-Check im Tab *Rechnen*: die beiden 3-Bet-Spots (JTo, KJo, QJs) durchgehen und die EV-Tabelle lesen.', min: 10, jump: { view: 'rechnen' } },
+        { t: 'Im Hand-Logbuch eine Hand aus den letzten Sessions suchen, in der du eine 3-Bet gecallt hast, und notieren.', min: 5, jump: { url: 'http://127.0.0.1:8139' } }
       ],
       target: 'In den Fragen mindestens 4 von 6 richtig. Viel wichtiger: bei jeder falschen Antwort verstehen, ob es an der Equity oder an der Realisierung lag.'
     },
@@ -201,8 +205,9 @@
       example: () => vs3bet({ hero: 'Kh9h', heroPos: 'BTN', villPos: 'BB', stack: 50, range: 'BB3_vs_BTN' }),
       quiz: { n: 8, gens: [gen3betBlind, gen3betEarly].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Trainer: 3-Bet-Pots (Tag 3BP), Stack 40–60bb, 20 Hände. Achte darauf, wer die Position hat.', min: 20, jump: { drill: { stacks: ['mid'], tags: ['3BP'], autoHint: false, profile: 'reg', multi: true } } },
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Trainer: 3-Bet-Pots (Tag 3BP), Stack 40–60bb, 10 Hände. Achte darauf, wer die Position hat.', min: 10, jump: { drill: { stacks: ['mid'], tags: ['3BP'], autoHint: false, profile: 'reg', multi: true } } },
         { t: 'Im Tab *Verlauf*: BB 3-bettet gegen deinen BTN-Open, du callst. Fünf Flops im Rate-Modus.', min: 5, jump: { verlauf: { heroPos: 'BTN', villPos: 'BB', line: 'hOpen_v3b', band: 'mid', quiz: true, solverFlop: true } } }
       ],
       target: 'Du kannst ohne nachzuschlagen sagen, warum KJo am BTN gegen den BB anders ist als KJo aus MP gegen den BTN.'
@@ -217,9 +222,10 @@
       example: () => vs3bet({ hero: 'AhJc', heroPos: 'CO', villPos: 'BTN', stack: 25, range: 'IP3_vs_early', call: 'CALL_JAM_MID' }),
       quiz: { n: 8, gens: [gen3betShort].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Stack-off-Check: alle sieben Spots einmal durch, beide Gegnertypen vergleichen.', min: 15, jump: { view: 'rechnen' } },
-        { t: 'Trainer: Stackband 20–35bb, alle Spot-Typen, 15 Hände.', min: 10, jump: { drill: { stacks: ['short'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Stack-off-Check: alle sieben Spots einmal durch, beide Gegnertypen vergleichen.', min: 10, jump: { view: 'rechnen' } },
+        { t: 'Trainer: Stackband 20–35bb, alle Spot-Typen, 8 Hände.', min: 5, jump: { drill: { stacks: ['short'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
       ],
       target: 'Bei 20–30bb gegen eine 3-Bet antwortest du in den Fragen nie mit „Call“, ohne es begründen zu können.'
     },
@@ -233,9 +239,10 @@
       example: () => vsSqueeze({ hero: 'JdTc', heroPos: 'BTN', caller: 'SB', stack: 60 }),
       quiz: { n: 8, gens: [genSqueeze].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Trainer: Mehrweg-Spots (Tag MW), 40–60bb, 15 Hände — Mehrweg-Pots sind die Folge von zu vielen Calls.', min: 15, jump: { drill: { stacks: ['mid'], tags: ['MW'], autoHint: false, profile: 'mix', multi: true } } },
-        { t: 'Eine eigene Squeeze-Situation aus dem Hand-Logbuch heraussuchen und mit einem Satz kommentieren.', min: 10, jump: { url: 'http://127.0.0.1:8139' } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „gegen ein Open“.', min: 15, jump: { preflop: 'vs' } },
+        { t: 'Trainer: Mehrweg-Spots (Tag MW), 40–60bb, 10 Hände — Mehrweg-Pots sind die Folge von zu vielen Calls.', min: 10, jump: { drill: { stacks: ['mid'], tags: ['MW'], autoHint: false, profile: 'mix', multi: true } } },
+        { t: 'Eine eigene Squeeze-Situation aus dem Hand-Logbuch heraussuchen und mit einem Satz kommentieren.', min: 5, jump: { url: 'http://127.0.0.1:8139' } }
       ],
       target: 'Du nennst die drei Hände aus den Fragen, bei denen du am meisten danebenlagst, und warum.'
     },
@@ -248,8 +255,9 @@
       example: null,
       quiz: { n: 8, gens: [gen3betEarly, gen3betCO, gen3betBlind, gen3betShort, genSqueeze].map(robust) },
       tasks: [
-        { t: 'Wiederholung — alles Fällige.', min: 15 },
-        { t: 'Gemischte Fragen oben (alle Spot-Typen dieser Woche).', min: 15 },
+        { t: 'Wiederholung — alles Fällige.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Gemischte Fragen oben (alle Spot-Typen dieser Woche).', min: 10 },
         { t: 'Coach-Bericht herunterladen, `/coach` in Claude Code aufrufen.', min: 25, coach: true }
       ],
       target: 'Gemischte Fragen: mindestens 6 von 8. Der Coach-Termin hat stattgefunden.'
@@ -264,9 +272,10 @@
       example: () => reshove({ hero: 'Kh8h', heroPos: 'SB', villPos: 'BTN', stack: 20, villStack: 40 }),
       quiz: { n: 10, gens: [genOpen(['SB'], 'mid'), genOpen(['SB'], 'short')].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Trainer: Blind vs Blind (Tag BvB), 20–60bb, 20 Hände.', min: 15, jump: { drill: { stacks: ['short', 'mid'], tags: ['BvB'], autoHint: false, profile: 'reg', multi: true } } },
-        { t: 'Range-Designer (Tab *Range*): dein Stack 15bb, „Früh im Turnier“ — welche Hände shovst du aus dem SB?', min: 10, jump: { view: 'range' } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „gegen ein Open“ — achte auf jede Frage aus dem SB.', min: 15, jump: { preflop: 'vs' } },
+        { t: 'Trainer: Blind vs Blind (Tag BvB), 20–60bb, 10 Hände.', min: 10, jump: { drill: { stacks: ['short', 'mid'], tags: ['BvB'], autoHint: false, profile: 'reg', multi: true } } },
+        { t: 'Range-Designer (Tab *Range*): dein Stack 15bb, „Früh im Turnier“ — welche Hände shovst du aus dem SB?', min: 5, jump: { view: 'range' } }
       ],
       target: 'Du kannst für 20bb im SB gegen einen BTN-Open fünf Hände nennen, die du shovst, und fünf, die du foldest.'
     },
@@ -280,9 +289,10 @@
       example: () => reshove({ hero: 'As5s', heroPos: 'BTN', villPos: 'CO', stack: 22, villStack: 40 }),
       quiz: null,
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Range-Designer (Tab *Range*): die Presets „Früh im Turnier“ und „Bubble, andere sind kürzer“ bei 15 und 20bb rechnen und vergleichen.', min: 15, jump: { view: 'range' } },
-        { t: 'Shove-Call-Trainer (Tab *Range*): 15 Fragen.', min: 10, jump: { view: 'range' } },
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Range-Designer (Tab *Range*): die Presets „Früh im Turnier“ und „Bubble, andere sind kürzer“ bei 15 und 20bb rechnen und vergleichen.', min: 10, jump: { view: 'range' } },
+        { t: 'Shove-Call-Trainer (Tab *Range*): 10 Fragen.', min: 5, jump: { view: 'range' } },
         { t: 'Trainer: 12–20bb, alle Spot-Typen, 10 Hände.', min: 15, jump: { drill: { stacks: ['push'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
       ],
       target: 'Shove-Call-Trainer über 75 %, und du kannst sagen, warum dieselbe Hand im Range-Designer an der Bubble anders ausgeht als früh im Turnier.'
@@ -297,8 +307,9 @@
       example: null,
       quiz: { n: 6, gens: [gen3betShort].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Shove-Call-Trainer im Tab *Range*: 25 Fragen, Auszahlung „Turnier“.', min: 25, jump: { view: 'range' } },
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Shove-Call-Trainer im Tab *Range*: 15 Fragen, Auszahlung „Turnier“.', min: 15, jump: { view: 'range' } },
         { t: 'Deine teuerste Call-Entscheidung gegen einen All-in aus den letzten Sessions im Hand-Logbuch suchen und nachrechnen: Equity gegen welche Range, welcher Preis?', min: 10, jump: { url: 'http://127.0.0.1:8139' } }
       ],
       target: 'Shove-Call-Trainer über 80 %.'
@@ -313,9 +324,10 @@
       example: () => reshove({ hero: 'Ks8s', heroPos: 'BTN', villPos: 'CO', stack: 25, villStack: 40 }),
       quiz: { n: 8, gens: [gen3betShort].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Trainer: Mehrweg (Tag MW), 20–35bb, 15 Hände.', min: 15, jump: { drill: { stacks: ['short'], tags: ['MW'], autoHint: false, profile: 'mix', multi: true } } },
-        { t: 'Prozess-Tab lesen: „Wer sitzt da?“ (Isolieren gegen Recreationals) und „Mit jedem zusätzlichen Gegner stirbt zuerst der Bluff“.', min: 10, jump: { view: 'prozess' } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „gegen ein Open“.', min: 15, jump: { preflop: 'vs' } },
+        { t: 'Trainer: Mehrweg (Tag MW), 20–35bb, 10 Hände.', min: 10, jump: { drill: { stacks: ['short'], tags: ['MW'], autoHint: false, profile: 'mix', multi: true } } },
+        { t: 'Prozess-Tab lesen: „Wer sitzt da?“ (Isolieren gegen Recreationals) und „Mit jedem zusätzlichen Gegner stirbt zuerst der Bluff“.', min: 5, jump: { view: 'prozess' } }
       ],
       target: 'Du formulierst deine Regel für Shortys mit Bounty in einem Satz und schreibst sie in den Check-in.'
     },
@@ -328,8 +340,9 @@
       example: null,
       quiz: { n: 10, gens: [gen3betShort, genSqueeze, gen3betBlind, genOpen(['SB', 'BTN'], 'mid')].map(robust) },
       tasks: [
-        { t: 'Wiederholung — alles Fällige.', min: 15 },
-        { t: 'Gemischte Fragen oben.', min: 15 },
+        { t: 'Wiederholung — alles Fällige.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Gemischte Fragen oben.', min: 10 },
         { t: 'Coach-Bericht herunterladen, `/coach` aufrufen.', min: 25, coach: true }
       ],
       target: 'Gemischte Fragen: mindestens 7 von 10.'
@@ -344,9 +357,10 @@
       example: null,
       quiz: { n: 15, gens: [genOpen(['EP', 'MP'], 'mid'), genOpen(['CO', 'BTN', 'SB'], 'mid')].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Steckbrief-Tab (*Hände*): A8o, K8s, QTo, A5s ansehen — in welcher Position wird jede zur Open-Hand?', min: 15, jump: { view: 'haende' } },
-        { t: 'Trainer: alle Spot-Typen 40–60bb, 15 Hände.', min: 10, jump: { drill: { stacks: ['mid'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „Erster im Pot“.', min: 15, jump: { preflop: 'open' } },
+        { t: 'Steckbrief-Tab (*Hände*): A8o, K8s, QTo, A5s ansehen — in welcher Position wird jede zur Open-Hand?', min: 10, jump: { view: 'haende' } },
+        { t: 'Trainer: alle Spot-Typen 40–60bb, 8 Hände.', min: 5, jump: { drill: { stacks: ['mid'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
       ],
       target: 'Mindestens 12 von 15 Open-Fragen richtig.'
     },
@@ -360,9 +374,10 @@
       example: null,
       quiz: { n: 10, gens: [genOpen(['CO', 'BTN'], 'mid'), gen3betCO].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Verlauf: CO öffnet, du callst am BTN — fünf Solver-Flops im Rate-Modus.', min: 15, jump: { verlauf: { heroPos: 'BTN', villPos: 'CO', line: 'vOpen_hCall', band: 'mid', quiz: true, solverFlop: true } } },
-        { t: 'Trainer: CO öffnet, BTN callt (Defense in Position), 10 Hände.', min: 10, jump: { drill: { stacks: ['mid'], tags: ['DEF'], autoHint: false, profile: 'reg', multi: true } } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „gegen ein Open“.', min: 15, jump: { preflop: 'vs' } },
+        { t: 'Verlauf: CO öffnet, du callst am BTN — drei Solver-Flops im Rate-Modus.', min: 10, jump: { verlauf: { heroPos: 'BTN', villPos: 'CO', line: 'vOpen_hCall', band: 'mid', quiz: true, solverFlop: true } } },
+        { t: 'Trainer: CO öffnet, BTN callt (Defense in Position), 5 Hände.', min: 5, jump: { drill: { stacks: ['mid'], tags: ['DEF'], autoHint: false, profile: 'reg', multi: true } } }
       ],
       target: 'Rate-Modus: im Schnitt höchstens 15 Punkte daneben.'
     },
@@ -374,8 +389,9 @@
       example: null,
       quiz: { n: 15, gens: [gen3betEarly, gen3betCO, gen3betBlind, gen3betShort, genSqueeze, genOpen(['EP', 'MP', 'CO', 'BTN'], 'mid')].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Gemischte Fragen oben.', min: 25 },
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Gemischte Fragen oben.', min: 15 },
         { t: 'Trainer gemischt, 40–60bb, 10 Hände.', min: 10, jump: { drill: { stacks: ['short', 'mid'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'mix', multi: true } } }
       ],
       target: 'Mindestens 11 von 15.'
@@ -388,7 +404,7 @@
       example: null,
       quiz: { n: 20, test: true, gens: [gen3betEarly, gen3betCO, gen3betBlind, gen3betShort, genSqueeze, genOpen(['EP', 'MP', 'CO', 'BTN', 'SB'], 'mid')].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
+        { t: 'Preflop-Drill (Tab *Range*), kurz — der Test ist heute wichtiger.', min: 10, jump: { preflop: 'mix' } },
         { t: 'Block-Test oben (20 Fragen).', min: 35 }
       ],
       target: 'Bestanden ab 16 von 20 (80 %).'
@@ -401,8 +417,9 @@
       example: null,
       quiz: null,
       tasks: [
-        { t: 'Wiederholung — alles Fällige.', min: 15 },
-        { t: 'Coach-Bericht herunterladen, `/coach` aufrufen, Block-Review.', min: 45, coach: true }
+        { t: 'Wiederholung — alles Fällige.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*) — danach die Preflop-Auswertung neu bauen: `node tools/preflop/preflop-report.js`.', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Coach-Bericht herunterladen, `/coach` aufrufen, Block-Review.', min: 40, coach: true }
       ],
       target: 'Block 2 ist freigeschaltet.'
     }

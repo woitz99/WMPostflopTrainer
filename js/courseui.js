@@ -93,6 +93,7 @@
 
   function jumpLabel(j) {
     if (j.drill) return 'Drill starten';
+    if (j.preflop) return 'Preflop-Drill öffnen';
     if (j.verlauf) return 'Verlauf öffnen';
     if (j.url) return 'Hand-Logbuch öffnen';
     return 'Tab öffnen';
@@ -232,6 +233,7 @@
     if (j.url) { window.open(j.url, '_blank', 'noopener'); return; }
     if (!P.App) return;
     if (j.drill) { P.App.startDrill(j.drill); return; }
+    if (j.preflop) { P.App.startPreflop(j.preflop); return; }
     if (j.verlauf) {
       P.App.switchView('verlauf');
       P.RangeFlow.preset(document.querySelector('#rfRoot'), j.verlauf);

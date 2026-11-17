@@ -875,6 +875,24 @@ table.hpev td.evbad{color:var(--bad)}
 
 <!-- ============================ RANGE-DESIGNER ====================== -->
 <main id="view-range" class="view">
+  <section class="panel wide" id="pfPanel">
+    <h3>Preflop-Drill — öffnen, callen, 3-betten</h3>
+    <p class="muted hpintro">15 Minuten am Tag, eine Entscheidung nach der anderen. Gefragt wird, was
+      die Ranges des Trainers sagen: Erster im Pot — Raise oder Fold? Ein Open vor dir — Fold, Call
+      oder 3-Bet? Die Hände sind nicht zufällig verteilt: viele liegen knapp an der Range-Grenze,
+      vor allem die Offsuit-Hände, an denen deine Auswertung vom 17.11. hängen blieb (QTo, KJo, A8o …).
+      Falsche Antworten kommen später wieder. Die Ranges sind Näherungen ohne Ante, keine Solver-Charts.</p>
+    <div class="planactions">
+      <button class="primary" id="pfNew">Neue Frage ▸</button>
+      <select id="pfMode" aria-label="Welche Entscheidungen">
+        <option value="mix">Gemischt</option>
+        <option value="open">Nur: Erster im Pot</option>
+        <option value="vs">Nur: gegen ein Open</option>
+      </select>
+      <span class="muted" id="pfScore"></span>
+    </div>
+    <div id="pfOut"></div>
+  </section>
   <section class="panel wide">
     <h3>Range-Designer — Push/Fold mit ICM</h3>
     <p class="muted hpintro">Chips sind im Turnier nicht linear. Die Chips, die du gewinnst, sind
@@ -7101,6 +7119,244 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
 })();
 
 
+/* ===== js/preflopdrill.js ===== */
+/* =========================================================================
+   preflopdrill.js — 15 Minuten Preflop: öffnen, callen, 3-betten.
+
+   Anlass: die Preflop-Auswertung vom 17.11.2026 (tools/preflop) über 2.361
+   eigene Hände. Zu tight war er kaum je — zu loose fast überall:
+     - Opens aus EP/MP rund 1,7× so weit wie die Range, fast nur
+       Offsuit-Broadways (QTo, KTo, KJo, JTo) und schwache Asse (A7o–A9o),
+     - Cold-Calls aus MP/CO/BTN 25–38 % statt 5–8 %,
+     - aus dem SB gecallt statt 3-Bet oder Fold.
+   Der Drill fragt genau diese Entscheidungen ab, Hand für Hand.
+
+   WAS "RICHTIG" HEISST — und wie belastbar das ist
+   Richtig ist, was die Ranges des Trainers sagen (ranges.js, über
+   rangeflow.js für Call- und 3-Bet-Ranges). Das sind Näherungen, keine
+   Solver-Charts mit Ante. Wo das Modell für eine Positions-Kombination
+   keine eigene Range hat, nimmt es die nächstliegende und sagt das dazu
+   ("genähert"). Dieselbe Logik benutzt tools/preflop/preflop-report.js —
+   Drill und Auswertung sprechen also dieselbe Sprache.
+
+   WELCHE HÄNDE KOMMEN
+   Nicht gleichverteilt: dann wäre "Fold" fast immer richtig und der Drill
+   nutzlos. Etwa 40 % kommen aus der Range, der Rest knapp daneben — Hände,
+   die eine Position weiter hinten gespielt würden, die der Opener selbst
+   öffnet, und die Offsuit-Hände, an denen die Auswertung hängen blieb.
+   Diese Schwerpunkte kommen aus dem Modell (wo die Range-Grenze liegt),
+   nicht aus den eigenen Händen — im Repo steht nichts Privates.
+
+   Ohne DOM: Frage bauen und bewerten lässt sich in Node testen.
+   ========================================================================= */
+(function () {
+  const P = window.PT;
+
+  const classSet = str => new Set(str ? P.parseRange(str).filter(x => x.w > 0).map(x => P.handClassOf(x.c)) : []);
+  const bandOf = bb => bb <= 35 ? 'short' : 'mid';
+  const pick = (arr, r) => arr[Math.floor(r() * arr.length)];
+  function weighted(list, r) {
+    let x = r() * list.reduce((a, e) => a + e[1], 0);
+    for (const e of list) { x -= e[1]; if (x <= 0) return e[0]; }
+    return list[list.length - 1][0];
+  }
+
+  /* Die Offsuit-Hände, an denen die Auswertung hängen blieb, und schwache
+     Suited-Hände — sie sollen oft kommen, auch wo sie klar Fold sind. */
+  const TRAPS = ['A9o', 'A8o', 'A7o', 'A6o', 'A5o', 'A4o', 'KJo', 'KTo', 'K9o', 'K8o', 'K7o', 'QJo', 'QTo', 'Q9o',
+    'JTo', 'J9o', 'T9o', 'K8s', 'K6s', 'K4s', 'Q8s', 'Q7s', 'Q6s', 'J8s', 'J7s', 'T8s', '97s', '87s', '76s', '64s',
+    '44', '33', '22', 'ATo', 'AJo', 'KQo'];
+
+  /* Nach dem Open von Position X: wer handelt nach dir noch? (8er-Tisch:
+     EP = UTG/UTG+1, MP = die beiden davor bis CO) */
+  const BEHIND = { EP: 6, MP: 4, CO: 3, BTN: 2, SB: 1 };
+
+  /* ---------------- Modell ---------------- */
+  const OPEN_SRC = 'ranges.js RFI';
+  function openModel(pos, band) {
+    return { raise: classSet(P.adjustForStack(P.RFI[pos], band)), src: `${OPEN_SRC}.${pos}${band === 'short' ? ' (Kurzstack-Variante)' : ''}` };
+  }
+
+  /**
+   * Call- und 3-Bet-Range für dich (hero) gegen das Open von v.
+   * Lücken im Modell werden mit der nächstliegenden Range gefüllt und
+   * im Text als "genähert" ausgewiesen.
+   */
+  function vsModel(h, v, band) {
+    let ch = h, cv = v; const note = [];
+    if ((h === 'EP' || h === 'MP') && (v === 'EP' || v === 'MP')) { ch = 'CO'; cv = 'EP'; note.push('genähert (CO gegen EP)'); }
+    const RF = P.RangeFlow;
+    const c = RF.preflopRanges('vOpen_hCall', ch, cv, band).hero, t = RF.preflopRanges('vOpen_h3b', ch, cv, band).hero;
+    let call = c && c.str, tb = t && t.str, srcC = c && c.src, approxC = c && c.approx, src3 = t && t.src, approx3 = t && t.approx;
+    if (!tb && ch === 'CO') { tb = P.THREEBET.BTN_vs_EP; src3 = '3-Bet BTN_vs_EP'; approx3 = true; }
+    if (h === 'SB' && (v === 'EP' || v === 'MP')) { tb = P.THREEBET.BTN_vs_EP; src3 = '3-Bet BTN_vs_EP'; approx3 = true; }
+    // Aus dem SB spielt das Modell 3-Bet oder Fold. "Spielbar" ist dort,
+    // was der Button cold-callen würde — aber eben als 3-Bet.
+    let sb = false;
+    if (h === 'SB') {
+      sb = true; approxC = false;
+      call = (v === 'CO' || v === 'BTN') ? P.IP_FLAT.BTN_vs_CO : P.IP_FLAT.BTN_vs_MP;
+      srcC = 'keine — SB spielt 3-Bet oder Fold; spielbar = Button-Cold-Call-Range';
+    }
+    const C = classSet(call), T = classSet(tb);
+    const filled = closeGaps(C, T);
+    if (filled.length) note.push(`Lücke zwischen Call- und 3-Bet-Range geschlossen (${filled.join(', ')} als Call)`);
+    return {
+      sb, call: C, tb: T,
+      src: `Call: ${srcC || '—'}${approxC ? ' (genähert)' : ''} · 3-Bet: ${src3 || '—'}${approx3 ? ' (genähert)' : ''}${note.length ? ' · ' + note.join(', ') : ''}`
+    };
+  }
+
+  /* Werden zwei Ranges aus verschiedenen Spots zusammengesetzt, fallen Hände
+     dazwischen durch: BB gegen EP callt 22-99 und 3-bettet JJ+ — TT wäre
+     dann ein Fold. Was eine gespielte Hand derselben Familie schlägt (höheres
+     Paar, besserer Kicker bei gleicher hoher Karte und Farbe), wird
+     mindestens gecallt. Ändert C, gibt die ergänzten Hände zurück. */
+  function closeGaps(C, T) {
+    const R = 'AKQJT98765432', added = [];
+    const add = h => { if (!C.has(h) && !T.has(h)) { C.add(h); added.push(h); } };
+    const played = h => C.has(h) || T.has(h);
+    // Paare: alles zwischen dem schwächsten gecallten und dem stärksten Paar überhaupt
+    for (let i = R.length - 1; i >= 0; i--) {
+      const p = R[i] + R[i];
+      if (C.has(p)) for (let j = i - 1; j >= 0; j--) add(R[j] + R[j]);
+    }
+    // Gleiche hohe Karte, gleiche Farbe: besserer Kicker — nur Broadway-Kicker
+    // (T+). A5s-A2s ohne A6s-A9s ist kein Loch, sondern Absicht (Wheel-Blocker).
+    const T_ = R.indexOf('T');
+    for (const h of [...C]) {
+      if (h.length !== 3) continue;
+      const hi = R.indexOf(h[0]), lo = R.indexOf(h[1]);
+      for (let k = Math.min(lo - 1, T_); k > hi; k--) { const better = h[0] + R[k] + h[2]; if (!played(better)) add(better); }
+    }
+    return added;
+  }
+
+  /** Was das Modell mit dieser Hand gegen das Open macht: Liste erlaubter Antworten. */
+  function vsIdeal(m, hc) {
+    const inC = m.call.has(hc), in3 = m.tb.has(hc);
+    if (m.sb) return inC || in3 ? ['3B'] : ['FOLD'];
+    const a = [];
+    if (in3) a.push('3B');
+    if (inC) a.push('CALL');
+    return a.length ? a : ['FOLD'];
+  }
+
+  /* ---------------- Fragen bauen ---------------- */
+  const OPEN_POS = [['EP', 30], ['MP', 25], ['CO', 15], ['BTN', 15], ['SB', 15]];
+  const VS_SPOTS = [
+    [['MP', 'EP'], 8], [['CO', 'EP'], 8], [['CO', 'MP'], 8], [['BTN', 'EP'], 7], [['BTN', 'MP'], 7], [['BTN', 'CO'], 8],
+    [['SB', 'EP'], 6], [['SB', 'MP'], 6], [['SB', 'CO'], 7], [['SB', 'BTN'], 8],
+    [['BB', 'EP'], 5], [['BB', 'MP'], 5], [['BB', 'CO'], 6], [['BB', 'BTN'], 7], [['BB', 'SB'], 4]
+  ];
+  const STACKS = { short: [20, 25, 30], mid: [40, 50, 60] };
+  const NEXT_WIDER = { EP: 'MP', MP: 'CO', CO: 'BTN', BTN: 'BTN', SB: 'BTN' };
+
+  function cardsFor(hc, r) {
+    const S = 'cdhs', s1 = S[Math.floor(r() * 4)];
+    let s2 = s1;
+    if (hc.length === 2 || hc[2] === 'o') { do { s2 = S[Math.floor(r() * 4)]; } while (s2 === s1); }
+    return [P.cardFromStr(hc[0] + s1), P.cardFromStr(hc[1] + s2)];
+  }
+
+  /** Hand ziehen: ~40 % aus der Range, der Rest knapp daneben. */
+  function pickHand(inRange, near, r) {
+    const a = [...inRange], b = [...near].filter(h => !inRange.has(h));
+    if (b.length && (r() >= 0.4 || !a.length)) return pick(b, r);
+    return pick(a, r);
+  }
+
+  /**
+   * @param mode 'mix' | 'open' | 'vs'
+   * @returns {type, pos, opener?, band, stack, hc, cards}
+   */
+  function make(mode, r) {
+    r = r || P.rng;
+    const type = mode === 'open' || mode === 'vs' ? mode : (r() < 0.5 ? 'open' : 'vs');
+    const band = r() < 0.5 ? 'short' : 'mid', stack = pick(STACKS[band], r);
+    if (type === 'open') {
+      const pos = weighted(OPEN_POS, r), m = openModel(pos, band);
+      const near = new Set([...classSet(P.adjustForStack(P.RFI[NEXT_WIDER[pos]], band)), ...TRAPS]);
+      const hc = pickHand(m.raise, near, r);
+      return { type, pos, band, stack, hc, cards: cardsFor(hc, r) };
+    }
+    const [pos, opener] = weighted(VS_SPOTS, r), m = vsModel(pos, opener, band);
+    const playable = new Set([...m.call, ...m.tb]);
+    const near = new Set([...classSet(P.adjustForStack(P.RFI[opener], band)), ...TRAPS]);
+    const hc = pickHand(playable, near, r);
+    return { type, pos, opener, band, stack, hc, cards: cardsFor(hc, r) };
+  }
+
+  /* ---------------- Bewerten ---------------- */
+  const LABEL = { FOLD: 'Fold', LIMP: 'Limp', RAISE: 'Raise', CALL: 'Call', '3B': '3-Bet' };
+  const offsuitNonPair = hc => hc.length === 3 && hc[2] === 'o';
+
+  /**
+   * @param key 'FOLD'|'LIMP'|'RAISE' (Open) bzw. 'FOLD'|'CALL'|'3B' (gegen Open)
+   * @returns {right, grade:'ok'|'ok2'|'warn'|'bad', ideal:[keys], why, model}
+   */
+  function grade(q, key) {
+    if (q.type === 'open') {
+      const m = openModel(q.pos, q.band), inR = m.raise.has(q.hc);
+      const ideal = [inR ? 'RAISE' : 'FOLD'];
+      let g = key === ideal[0] ? 'ok' : 'bad', why;
+      if (key === 'LIMP' && q.pos === 'SB' && inR) {
+        g = 'ok2';
+        why = 'Das Modell kennt aus dem SB nur Raise oder Fold. Ein Limp kann als eigene Strategie vertretbar sein — aber nur, wenn du auch starke Hände limpst, sonst liest der BB deine Limps als schwach.';
+      } else if (key === 'LIMP') {
+        why = `Open-Limps gibt es im Modell nicht: ${inR ? 'die Hand ist gut genug zum Raisen' : 'die Hand gehört gefoldet'}. Hinter dem Limp bekommst du Iso-Raises und Mehrweg-Pots ohne Initiative.`;
+      } else if (inR && key === 'FOLD') {
+        why = `${q.hc} steht in der Open-Range aus ${q.pos}. Liegen lassen kostet hier zwar weniger als ein falscher Open — aber es ist Geld, das du nicht abholst.`;
+      } else if (!inR && key === 'RAISE') {
+        why = `${q.hc} ist aus ${q.pos} zu schwach: hinter dir sitzen noch etwa ${BEHIND[q.pos]} Spieler.` +
+          (offsuitNonPair(q.hc) ? ' Offsuit ist die Hand leicht dominiert — wer dich callt oder 3-bettet, hat oft dieselbe hohe Karte mit besserem Kicker.' : '');
+      } else {
+        why = inR ? `${q.hc} gehört aus ${q.pos} in die Open-Range.` : `${q.hc} liegt aus ${q.pos} außerhalb der Open-Range.`;
+      }
+      return { right: g === 'ok' || g === 'ok2', grade: g, ideal, why, model: m };
+    }
+    const m = vsModel(q.pos, q.opener, q.band), ideal = vsIdeal(m, q.hc);
+    let g = ideal.includes(key) ? 'ok' : 'bad', why;
+    const play = ideal[0] !== 'FOLD';
+    if (g === 'ok') {
+      why = !play ? `${q.hc} liegt gegen ein Open aus ${q.opener} außerhalb von Call- und 3-Bet-Range.`
+        : m.sb ? `Aus dem SB: ${q.hc} ist spielbar — als 3-Bet. Callen würde den BB hinter dir billig mitspielen lassen.`
+        : ideal.length > 1 ? `${q.hc} steht in beiden Ranges — Call und 3-Bet sind vertretbar.`
+        : `${q.hc}: ${LABEL[ideal[0]]} gegen ${q.opener} ist die Antwort des Modells.`;
+    } else if (play && key !== 'FOLD') {
+      g = 'warn';
+      why = m.sb ? 'Aus dem SB nicht callen: du bist ohne Position, und der BB kann hinter dir squeezen oder billig mitspielen. Mit dieser Hand: 3-Bet.'
+        : key === '3B' ? `${q.hc} steht in der Call-Range, nicht in der 3-Bet-Range — gegen ${q.opener} spielt das Modell sie flach.`
+        : `${q.hc} ist zum Flatten zu stark: das Modell 3-bettet sie gegen ${q.opener}.`;
+    } else if (!play) {
+      why = `${q.hc} liegt außerhalb von Call- und 3-Bet-Range gegen ${q.opener}. Seine Open-Range ist ${q.opener === 'EP' || q.opener === 'MP' ? 'eng und stark' : 'breit, aber du bist nicht der letzte Spieler'}` +
+        (offsuitNonPair(q.hc) ? ' — und offsuit bist du gegen seine besseren Hände mit derselben hohen Karte oft dominiert.' : '.') +
+        (q.pos === 'SB' ? ' Aus dem SB zählt das doppelt: ohne Position, BB dahinter.' : '');
+    } else {
+      why = `${q.hc} ist gegen ${q.opener} spielbar (${ideal.map(k => LABEL[k]).join(' oder ')}). Folden ist hier der Fehler — wenn auch der billigere.`;
+    }
+    if (q.band === 'short' && ideal.includes('3B')) why += ` Bei ${q.stack}bb ist eine 3-Bet meist ein All-in.`;
+    return { right: g === 'ok', grade: g, ideal, why, model: m };
+  }
+
+  /** Für die Rasterdarstellung: Antwort des Modells je Handklasse. */
+  function idealFor(q, hc) {
+    if (q.type === 'open') return openModel(q.pos, q.band).raise.has(hc) ? 'RAISE' : 'FOLD';
+    return vsIdeal(vsModel(q.pos, q.opener, q.band), hc)[0];
+  }
+
+  function text(q) {
+    if (q.type === 'open') return `Alle folden zu dir in <b>${q.pos}</b>. Du hast <b>${q.stack}bb</b>.`;
+    return `<b>${q.opener}</b> öffnet auf ${q.band === 'short' ? '2' : '2,2'}bb, alle folden zu dir in <b>${q.pos}</b>. Effektiv <b>${q.stack}bb</b>.`;
+  }
+  const options = q => q.type === 'open' ? ['FOLD', 'LIMP', 'RAISE'] : ['FOLD', 'CALL', '3B'];
+  /** Schlüssel für die Wiederholung: dieselbe Entscheidung, nicht dieselben Farben. */
+  const keyOf = q => [q.type, q.pos, q.opener || '', q.band, q.hc].join('|');
+
+  P.PreflopDrill = { make, grade, idealFor, text, options, keyOf, openModel, vsModel, vsIdeal, classSet, bandOf, LABEL, TRAPS };
+})();
+
+
 /* ===== js/stackoff.js ===== */
 /* =========================================================================
    stackoff.js — Hand-Check: deine eigenen Stack-off- und 3-Bet-Spots
@@ -8415,8 +8671,11 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
      - Abweichung im Rate-Modus auf Solver-Flops (Ziel ≤ 8 Punkte),
      - keinen Stack-Bluffs > 50 % ohne Equity/Blocker.
 
-   Aufbau jeder Einheit (60 min): Wiederholung 10 · Lektion + Fragen 20 ·
-   Auftrag 25 · Check-in 5. Die Blöcke folgen den Leaks aus den Reviews
+   Aufbau jeder Einheit (60 min): Wiederholung 5 · Preflop-Drill 15 ·
+   Lektion + Fragen 20 · Auftrag 15 · Check-in 5. Der Preflop-Drill
+   (js/preflopdrill.js) kam am 17.11. dazu, nach der Auswertung der eigenen
+   Opens und Calls (tools/preflop): fast überall zu loose. Die 15 Minuten
+   gingen von der Wiederholung und den Trainer-Aufträgen ab. Die Blöcke folgen den Leaks aus den Reviews
    (siehe Coaching-Protokoll coach/protokoll.md). Block 1 ist ausformuliert;
    die späteren Blöcke schreibt der Coach nach dem jeweiligen Block-Review,
    damit sie auf die Ergebnisse reagieren können.
@@ -8591,9 +8850,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: () => vs3bet({ hero: 'Ac7d', heroPos: 'MP', villPos: 'CO', stack: 50, range: 'IP3_vs_early', mult: 4 }),
       quiz: { n: 6, gens: [gen3betEarly, gen3betCO].map(robust) },
       tasks: [
-        { t: 'Wiederholung: fällige Fehler im Trainer abarbeiten (⟳ oben).', min: 10 },
-        { t: 'Stack-off-Check im Tab *Rechnen*: die beiden 3-Bet-Spots (JTo, KJo, QJs) durchgehen und die EV-Tabelle lesen.', min: 15, jump: { view: 'rechnen' } },
-        { t: 'Im Hand-Logbuch die letzten beiden Sessions nach Händen durchsuchen, in denen du eine 3-Bet gecallt hast. Eine notieren.', min: 10, jump: { url: 'http://127.0.0.1:8139' } }
+        { t: 'Wiederholung: fällige Fehler im Trainer abarbeiten (⟳ oben).', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), gemischt — so viele Fragen, wie in 15 Minuten gehen.', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Stack-off-Check im Tab *Rechnen*: die beiden 3-Bet-Spots (JTo, KJo, QJs) durchgehen und die EV-Tabelle lesen.', min: 10, jump: { view: 'rechnen' } },
+        { t: 'Im Hand-Logbuch eine Hand aus den letzten Sessions suchen, in der du eine 3-Bet gecallt hast, und notieren.', min: 5, jump: { url: 'http://127.0.0.1:8139' } }
       ],
       target: 'In den Fragen mindestens 4 von 6 richtig. Viel wichtiger: bei jeder falschen Antwort verstehen, ob es an der Equity oder an der Realisierung lag.'
     },
@@ -8607,8 +8867,9 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: () => vs3bet({ hero: 'Kh9h', heroPos: 'BTN', villPos: 'BB', stack: 50, range: 'BB3_vs_BTN' }),
       quiz: { n: 8, gens: [gen3betBlind, gen3betEarly].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Trainer: 3-Bet-Pots (Tag 3BP), Stack 40–60bb, 20 Hände. Achte darauf, wer die Position hat.', min: 20, jump: { drill: { stacks: ['mid'], tags: ['3BP'], autoHint: false, profile: 'reg', multi: true } } },
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Trainer: 3-Bet-Pots (Tag 3BP), Stack 40–60bb, 10 Hände. Achte darauf, wer die Position hat.', min: 10, jump: { drill: { stacks: ['mid'], tags: ['3BP'], autoHint: false, profile: 'reg', multi: true } } },
         { t: 'Im Tab *Verlauf*: BB 3-bettet gegen deinen BTN-Open, du callst. Fünf Flops im Rate-Modus.', min: 5, jump: { verlauf: { heroPos: 'BTN', villPos: 'BB', line: 'hOpen_v3b', band: 'mid', quiz: true, solverFlop: true } } }
       ],
       target: 'Du kannst ohne nachzuschlagen sagen, warum KJo am BTN gegen den BB anders ist als KJo aus MP gegen den BTN.'
@@ -8623,9 +8884,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: () => vs3bet({ hero: 'AhJc', heroPos: 'CO', villPos: 'BTN', stack: 25, range: 'IP3_vs_early', call: 'CALL_JAM_MID' }),
       quiz: { n: 8, gens: [gen3betShort].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Stack-off-Check: alle sieben Spots einmal durch, beide Gegnertypen vergleichen.', min: 15, jump: { view: 'rechnen' } },
-        { t: 'Trainer: Stackband 20–35bb, alle Spot-Typen, 15 Hände.', min: 10, jump: { drill: { stacks: ['short'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Stack-off-Check: alle sieben Spots einmal durch, beide Gegnertypen vergleichen.', min: 10, jump: { view: 'rechnen' } },
+        { t: 'Trainer: Stackband 20–35bb, alle Spot-Typen, 8 Hände.', min: 5, jump: { drill: { stacks: ['short'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
       ],
       target: 'Bei 20–30bb gegen eine 3-Bet antwortest du in den Fragen nie mit „Call“, ohne es begründen zu können.'
     },
@@ -8639,9 +8901,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: () => vsSqueeze({ hero: 'JdTc', heroPos: 'BTN', caller: 'SB', stack: 60 }),
       quiz: { n: 8, gens: [genSqueeze].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Trainer: Mehrweg-Spots (Tag MW), 40–60bb, 15 Hände — Mehrweg-Pots sind die Folge von zu vielen Calls.', min: 15, jump: { drill: { stacks: ['mid'], tags: ['MW'], autoHint: false, profile: 'mix', multi: true } } },
-        { t: 'Eine eigene Squeeze-Situation aus dem Hand-Logbuch heraussuchen und mit einem Satz kommentieren.', min: 10, jump: { url: 'http://127.0.0.1:8139' } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „gegen ein Open“.', min: 15, jump: { preflop: 'vs' } },
+        { t: 'Trainer: Mehrweg-Spots (Tag MW), 40–60bb, 10 Hände — Mehrweg-Pots sind die Folge von zu vielen Calls.', min: 10, jump: { drill: { stacks: ['mid'], tags: ['MW'], autoHint: false, profile: 'mix', multi: true } } },
+        { t: 'Eine eigene Squeeze-Situation aus dem Hand-Logbuch heraussuchen und mit einem Satz kommentieren.', min: 5, jump: { url: 'http://127.0.0.1:8139' } }
       ],
       target: 'Du nennst die drei Hände aus den Fragen, bei denen du am meisten danebenlagst, und warum.'
     },
@@ -8654,8 +8917,9 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: null,
       quiz: { n: 8, gens: [gen3betEarly, gen3betCO, gen3betBlind, gen3betShort, genSqueeze].map(robust) },
       tasks: [
-        { t: 'Wiederholung — alles Fällige.', min: 15 },
-        { t: 'Gemischte Fragen oben (alle Spot-Typen dieser Woche).', min: 15 },
+        { t: 'Wiederholung — alles Fällige.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Gemischte Fragen oben (alle Spot-Typen dieser Woche).', min: 10 },
         { t: 'Coach-Bericht herunterladen, `/coach` in Claude Code aufrufen.', min: 25, coach: true }
       ],
       target: 'Gemischte Fragen: mindestens 6 von 8. Der Coach-Termin hat stattgefunden.'
@@ -8670,9 +8934,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: () => reshove({ hero: 'Kh8h', heroPos: 'SB', villPos: 'BTN', stack: 20, villStack: 40 }),
       quiz: { n: 10, gens: [genOpen(['SB'], 'mid'), genOpen(['SB'], 'short')].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Trainer: Blind vs Blind (Tag BvB), 20–60bb, 20 Hände.', min: 15, jump: { drill: { stacks: ['short', 'mid'], tags: ['BvB'], autoHint: false, profile: 'reg', multi: true } } },
-        { t: 'Range-Designer (Tab *Range*): dein Stack 15bb, „Früh im Turnier“ — welche Hände shovst du aus dem SB?', min: 10, jump: { view: 'range' } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „gegen ein Open“ — achte auf jede Frage aus dem SB.', min: 15, jump: { preflop: 'vs' } },
+        { t: 'Trainer: Blind vs Blind (Tag BvB), 20–60bb, 10 Hände.', min: 10, jump: { drill: { stacks: ['short', 'mid'], tags: ['BvB'], autoHint: false, profile: 'reg', multi: true } } },
+        { t: 'Range-Designer (Tab *Range*): dein Stack 15bb, „Früh im Turnier“ — welche Hände shovst du aus dem SB?', min: 5, jump: { view: 'range' } }
       ],
       target: 'Du kannst für 20bb im SB gegen einen BTN-Open fünf Hände nennen, die du shovst, und fünf, die du foldest.'
     },
@@ -8686,9 +8951,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: () => reshove({ hero: 'As5s', heroPos: 'BTN', villPos: 'CO', stack: 22, villStack: 40 }),
       quiz: null,
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Range-Designer (Tab *Range*): die Presets „Früh im Turnier“ und „Bubble, andere sind kürzer“ bei 15 und 20bb rechnen und vergleichen.', min: 15, jump: { view: 'range' } },
-        { t: 'Shove-Call-Trainer (Tab *Range*): 15 Fragen.', min: 10, jump: { view: 'range' } },
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Range-Designer (Tab *Range*): die Presets „Früh im Turnier“ und „Bubble, andere sind kürzer“ bei 15 und 20bb rechnen und vergleichen.', min: 10, jump: { view: 'range' } },
+        { t: 'Shove-Call-Trainer (Tab *Range*): 10 Fragen.', min: 5, jump: { view: 'range' } },
         { t: 'Trainer: 12–20bb, alle Spot-Typen, 10 Hände.', min: 15, jump: { drill: { stacks: ['push'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
       ],
       target: 'Shove-Call-Trainer über 75 %, und du kannst sagen, warum dieselbe Hand im Range-Designer an der Bubble anders ausgeht als früh im Turnier.'
@@ -8703,8 +8969,9 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: null,
       quiz: { n: 6, gens: [gen3betShort].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Shove-Call-Trainer im Tab *Range*: 25 Fragen, Auszahlung „Turnier“.', min: 25, jump: { view: 'range' } },
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Shove-Call-Trainer im Tab *Range*: 15 Fragen, Auszahlung „Turnier“.', min: 15, jump: { view: 'range' } },
         { t: 'Deine teuerste Call-Entscheidung gegen einen All-in aus den letzten Sessions im Hand-Logbuch suchen und nachrechnen: Equity gegen welche Range, welcher Preis?', min: 10, jump: { url: 'http://127.0.0.1:8139' } }
       ],
       target: 'Shove-Call-Trainer über 80 %.'
@@ -8719,9 +8986,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: () => reshove({ hero: 'Ks8s', heroPos: 'BTN', villPos: 'CO', stack: 25, villStack: 40 }),
       quiz: { n: 8, gens: [gen3betShort].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Trainer: Mehrweg (Tag MW), 20–35bb, 15 Hände.', min: 15, jump: { drill: { stacks: ['short'], tags: ['MW'], autoHint: false, profile: 'mix', multi: true } } },
-        { t: 'Prozess-Tab lesen: „Wer sitzt da?“ (Isolieren gegen Recreationals) und „Mit jedem zusätzlichen Gegner stirbt zuerst der Bluff“.', min: 10, jump: { view: 'prozess' } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „gegen ein Open“.', min: 15, jump: { preflop: 'vs' } },
+        { t: 'Trainer: Mehrweg (Tag MW), 20–35bb, 10 Hände.', min: 10, jump: { drill: { stacks: ['short'], tags: ['MW'], autoHint: false, profile: 'mix', multi: true } } },
+        { t: 'Prozess-Tab lesen: „Wer sitzt da?“ (Isolieren gegen Recreationals) und „Mit jedem zusätzlichen Gegner stirbt zuerst der Bluff“.', min: 5, jump: { view: 'prozess' } }
       ],
       target: 'Du formulierst deine Regel für Shortys mit Bounty in einem Satz und schreibst sie in den Check-in.'
     },
@@ -8734,8 +9002,9 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: null,
       quiz: { n: 10, gens: [gen3betShort, genSqueeze, gen3betBlind, genOpen(['SB', 'BTN'], 'mid')].map(robust) },
       tasks: [
-        { t: 'Wiederholung — alles Fällige.', min: 15 },
-        { t: 'Gemischte Fragen oben.', min: 15 },
+        { t: 'Wiederholung — alles Fällige.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Gemischte Fragen oben.', min: 10 },
         { t: 'Coach-Bericht herunterladen, `/coach` aufrufen.', min: 25, coach: true }
       ],
       target: 'Gemischte Fragen: mindestens 7 von 10.'
@@ -8750,9 +9019,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: null,
       quiz: { n: 15, gens: [genOpen(['EP', 'MP'], 'mid'), genOpen(['CO', 'BTN', 'SB'], 'mid')].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Steckbrief-Tab (*Hände*): A8o, K8s, QTo, A5s ansehen — in welcher Position wird jede zur Open-Hand?', min: 15, jump: { view: 'haende' } },
-        { t: 'Trainer: alle Spot-Typen 40–60bb, 15 Hände.', min: 10, jump: { drill: { stacks: ['mid'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „Erster im Pot“.', min: 15, jump: { preflop: 'open' } },
+        { t: 'Steckbrief-Tab (*Hände*): A8o, K8s, QTo, A5s ansehen — in welcher Position wird jede zur Open-Hand?', min: 10, jump: { view: 'haende' } },
+        { t: 'Trainer: alle Spot-Typen 40–60bb, 8 Hände.', min: 5, jump: { drill: { stacks: ['mid'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'reg', multi: true } } }
       ],
       target: 'Mindestens 12 von 15 Open-Fragen richtig.'
     },
@@ -8766,9 +9036,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: null,
       quiz: { n: 10, gens: [genOpen(['CO', 'BTN'], 'mid'), gen3betCO].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Verlauf: CO öffnet, du callst am BTN — fünf Solver-Flops im Rate-Modus.', min: 15, jump: { verlauf: { heroPos: 'BTN', villPos: 'CO', line: 'vOpen_hCall', band: 'mid', quiz: true, solverFlop: true } } },
-        { t: 'Trainer: CO öffnet, BTN callt (Defense in Position), 10 Hände.', min: 10, jump: { drill: { stacks: ['mid'], tags: ['DEF'], autoHint: false, profile: 'reg', multi: true } } }
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*), nur „gegen ein Open“.', min: 15, jump: { preflop: 'vs' } },
+        { t: 'Verlauf: CO öffnet, du callst am BTN — drei Solver-Flops im Rate-Modus.', min: 10, jump: { verlauf: { heroPos: 'BTN', villPos: 'CO', line: 'vOpen_hCall', band: 'mid', quiz: true, solverFlop: true } } },
+        { t: 'Trainer: CO öffnet, BTN callt (Defense in Position), 5 Hände.', min: 5, jump: { drill: { stacks: ['mid'], tags: ['DEF'], autoHint: false, profile: 'reg', multi: true } } }
       ],
       target: 'Rate-Modus: im Schnitt höchstens 15 Punkte daneben.'
     },
@@ -8780,8 +9051,9 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: null,
       quiz: { n: 15, gens: [gen3betEarly, gen3betCO, gen3betBlind, gen3betShort, genSqueeze, genOpen(['EP', 'MP', 'CO', 'BTN'], 'mid')].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
-        { t: 'Gemischte Fragen oben.', min: 25 },
+        { t: 'Wiederholung.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*).', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Gemischte Fragen oben.', min: 15 },
         { t: 'Trainer gemischt, 40–60bb, 10 Hände.', min: 10, jump: { drill: { stacks: ['short', 'mid'], tags: ['SRP', 'DEF', '3BP', 'BvB'], autoHint: false, profile: 'mix', multi: true } } }
       ],
       target: 'Mindestens 11 von 15.'
@@ -8794,7 +9066,7 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: null,
       quiz: { n: 20, test: true, gens: [gen3betEarly, gen3betCO, gen3betBlind, gen3betShort, genSqueeze, genOpen(['EP', 'MP', 'CO', 'BTN', 'SB'], 'mid')].map(robust) },
       tasks: [
-        { t: 'Wiederholung.', min: 10 },
+        { t: 'Preflop-Drill (Tab *Range*), kurz — der Test ist heute wichtiger.', min: 10, jump: { preflop: 'mix' } },
         { t: 'Block-Test oben (20 Fragen).', min: 35 }
       ],
       target: 'Bestanden ab 16 von 20 (80 %).'
@@ -8807,8 +9079,9 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
       example: null,
       quiz: null,
       tasks: [
-        { t: 'Wiederholung — alles Fällige.', min: 15 },
-        { t: 'Coach-Bericht herunterladen, `/coach` aufrufen, Block-Review.', min: 45, coach: true }
+        { t: 'Wiederholung — alles Fällige.', min: 5 },
+        { t: 'Preflop-Drill (Tab *Range*) — danach die Preflop-Auswertung neu bauen: `node tools/preflop/preflop-report.js`.', min: 15, jump: { preflop: 'mix' } },
+        { t: 'Coach-Bericht herunterladen, `/coach` aufrufen, Block-Review.', min: 40, coach: true }
       ],
       target: 'Block 2 ist freigeschaltet.'
     }
@@ -9019,6 +9292,7 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
 
   function jumpLabel(j) {
     if (j.drill) return 'Drill starten';
+    if (j.preflop) return 'Preflop-Drill öffnen';
     if (j.verlauf) return 'Verlauf öffnen';
     if (j.url) return 'Hand-Logbuch öffnen';
     return 'Tab öffnen';
@@ -9158,6 +9432,7 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
     if (j.url) { window.open(j.url, '_blank', 'noopener'); return; }
     if (!P.App) return;
     if (j.drill) { P.App.startDrill(j.drill); return; }
+    if (j.preflop) { P.App.startPreflop(j.preflop); return; }
     if (j.verlauf) {
       P.App.switchView('verlauf');
       P.RangeFlow.preset(document.querySelector('#rfRoot'), j.verlauf);
@@ -9309,6 +9584,7 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
     hp: { sel: 'AKo', rangeKey: 'bb_vs_btn_def', cache: {}, evCache: {}, busy: false },
     rd: { cache: {} },
     sc: { cache: {}, q: null, busy: false },
+    pf: { st: null, q: null, rep: null, answered: null },
     rf: { q: null, ev: null, picked: null, raise: null },
     mt: load('pt_mental', { right: 0, total: 0, streak: 0, best: 0 }),
     own: { id: null, step: 0, picks: [] }
@@ -10989,6 +11265,107 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
     scRenderScore();
   }
 
+  /* ============================ PREFLOP-DRILL ======================= *
+   * Öffnen, callen, 3-betten — gegen die Ranges des Trainers. Logik und
+   * Herkunft der Antworten in js/preflopdrill.js; hier Frage, Antwort,
+   * Darstellung und eine eigene kleine Wiederholung: falsch beantwortete
+   * Entscheidungen kommen nach den Leitner-Regeln aus review.js wieder.  */
+  const PF_STORE = 'pt_preflop';
+  function pfLoad() {
+    const d = load(PF_STORE, {});
+    return Object.assign({ right: 0, total: 0, day: null, items: [], mode: 'mix' }, d);
+  }
+  function pfSave() { try { localStorage.setItem(PF_STORE, JSON.stringify(S.pf.st)); } catch (e) { } }
+  function pfToday() {
+    const t = new Date(), d = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
+    const st = S.pf.st;
+    if (!st.day || st.day.d !== d) st.day = { d, n: 0, right: 0, start: Date.now() };
+    return st.day;
+  }
+
+  function pfNewQuestion() {
+    const D = P.PreflopDrill, st = S.pf.st, mode = $('#pfMode').value;
+    st.mode = mode;
+    // Fällige Wiederholungen zuerst — aber nicht zweimal dieselbe hintereinander.
+    const due = RV.due(st.items).filter(i => !S.pf.q || i.id !== D.keyOf(S.pf.q))
+      .filter(i => mode === 'mix' || i.q.type === mode);
+    let q, rep = null;
+    if (due.length && P.rng() < 0.5) {
+      rep = due[0];
+      q = Object.assign({}, rep.q, { cards: pfCards(rep.q.hc) });   // neue Farben, gleiche Entscheidung
+    } else q = D.make(mode);
+    S.pf.q = q; S.pf.rep = rep;
+    const opts = D.options(q);
+    $('#pfOut').innerHTML = `
+      <div class="scask">${rep ? '<span class="chip">Wiederholung</span> ' : ''}${D.text(q)} Du hältst ${miniCards(q.cards)} <b>${q.hc}</b>.</div>
+      <div class="opts" id="pfOpts"></div>`;
+    const wrap = $('#pfOpts');
+    opts.forEach(k => {
+      const b = document.createElement('button');
+      b.className = 'opt'; b.textContent = D.LABEL[k];
+      b.onclick = () => pfAnswer(k);
+      wrap.appendChild(b);
+    });
+    pfRenderScore();
+  }
+
+  /** Karten zu einer Handklasse würfeln (für Wiederholungen). */
+  function pfCards(hc) {
+    const S_ = 'cdhs', s1 = S_[(P.rng() * 4) | 0];
+    let s2 = s1;
+    if (hc.length === 2 || hc[2] === 'o') { do { s2 = S_[(P.rng() * 4) | 0]; } while (s2 === s1); }
+    return [P.cardFromStr(hc[0] + s1), P.cardFromStr(hc[1] + s2)];
+  }
+
+  function pfRenderScore() {
+    const day = pfToday(), min = Math.round((Date.now() - day.start) / 60000);
+    const due = RV.due(S.pf.st.items).length;
+    $('#pfScore').textContent = day.n
+      ? `Heute ${day.right} von ${day.n} richtig · ${min} min${due ? ` · ${due} zur Wiederholung` : ''}`
+      : due ? `${due} zur Wiederholung fällig` : '';
+  }
+
+  function pfAnswer(key) {
+    const D = P.PreflopDrill, q = S.pf.q; if (!q || S.pf.answered === q) return;
+    S.pf.answered = q;
+    const g = D.grade(q, key), st = S.pf.st, day = pfToday();
+    st.total++; day.n++; if (g.right) { st.right++; day.right++; }
+    // Wiederholung: falsche Entscheidungen merken, richtige hochstufen.
+    const id = D.keyOf(q);
+    let item = st.items.find(i => i.id === id);
+    if (!g.right && !item) { item = { id, q: { type: q.type, pos: q.pos, opener: q.opener, band: q.band, stack: q.stack, hc: q.hc }, box: 1 }; st.items.push(item); }
+    if (item) RV.applyResult(st, item, g.right);
+    RV.trim(st);
+    pfSave();
+
+    const isOpen = q.type === 'open';
+    const cls = k => k === '3B' ? 'rdp' : k === 'RAISE' ? 'rdp' : k === 'CALL' ? 'rdc' : 'rdf';
+    let n3 = 0, nc = 0;
+    const w = hc => (hc.length === 2 ? 6 : hc[2] === 's' ? 4 : 12) / 13.26;
+    const grid = P.HandProfile.allHandClasses().map(hc => {
+      const k = D.idealFor(q, hc);
+      if (k === '3B' || k === 'RAISE') n3 += w(hc); else if (k === 'CALL') nc += w(hc);
+      return `<button class="hpcell ${cls(k)}${hc === q.hc ? ' scme' : ''}" title="${hc}: ${D.LABEL[k]}">${hc}</button>`;
+    }).join('');
+    const legend = isOpen
+      ? `<span><i style="background:var(--acc2)"></i>Raise (${n3.toFixed(1)} %)</span><span><i style="background:#1b2621"></i>Fold</span>`
+      : `<span><i style="background:var(--acc2)"></i>3-Bet (${n3.toFixed(1)} %)</span>${g.model.sb ? '' : `<span><i style="background:var(--warn)"></i>Call (${nc.toFixed(1)} %)</span>`}<span><i style="background:#1b2621"></i>Fold</span>`;
+    const head = g.grade === 'ok' ? 'Richtig' : g.grade === 'ok2' ? 'Vertretbar' : g.grade === 'warn' ? 'Spielbar, aber falsche Art' : 'Falsch';
+    $('#pfOut').innerHTML = `
+      <div class="verdict ${g.grade}">
+        ${head} — ${miniCards(q.cards)} <b>${q.hc}</b> ${isOpen ? `aus ${q.pos}` : `in ${q.pos} gegen ${q.opener}`}: <b>${g.ideal.map(k => D.LABEL[k]).join(' oder ')}</b>
+        <small>Du: ${D.LABEL[key]} · ${q.stack}bb</small>
+      </div>
+      <div class="hpnote-sm">${g.why}</div>
+      <div class="hpgridwrap" style="margin-top:.6rem"><div class="hpgrid">${grid}</div></div>
+      <div class="hplegend">${legend}</div>
+      <div class="hpnote-sm">Range: ${isOpen ? g.model.src : `${q.pos} gegen ${q.opener} — ${g.model.src}`}. Das sind die Näherungen des Trainers, keine Solver-Charts mit Ante.</div>
+      <div class="planactions" style="margin-top:.6rem"><button class="primary" id="pfNext">Nächste Frage ▸</button></div>`;
+    $('#pfNext').onclick = pfNewQuestion;
+    $('#pfNext').focus();
+    pfRenderScore();
+  }
+
   /* ============================ RIVER-FILTER ======================== *
    * Ein Paar, zweimal gecallt, er checkt zum dritten Mal. Die Rechnung
    * steht in js/riverdrill.js; hier nur Frage, Antwort und Darstellung.
@@ -12246,6 +12623,7 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
     if (v === 'plan') { if (P.Course) P.Course.render($('#planOut')); else renderPlan(); }
     if (v === 'verlauf' && !$('#rfRoot').children.length) P.RangeFlow.mount($('#rfRoot'));
     if (v === 'range' && !$('#rdOut').children.length) { runRangeDesigner(); scNewQuestion(); }
+    if (v === 'range' && !$('#pfOut').children.length) pfNewQuestion();
     if (v === 'rechnen' && !$('#mtOpts').children.length) { mtScore(); mtNew(); renderSizings(); rfNew(); soNext(); }
     if (v === 'haende' && !$('#hpGrid').children.length) {
       renderHpGrid();
@@ -12307,6 +12685,12 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
         try { localStorage.setItem('pt_cfg', JSON.stringify(S.cfg)); } catch (e) { }
         cfgToUI(); switchView('trainer'); newHand();
       },
+      /** Preflop-Drill im Tab Range öffnen, optional mit Modus (mix/open/vs). */
+      startPreflop(mode) {
+        if (mode) $('#pfMode').value = mode;
+        switchView('range'); pfNewQuestion();
+        $('#pfPanel').scrollIntoView({ block: 'start' });
+      },
       stats: () => S.stats,
       reviewDue: () => RV.due(S.review.items).length
     };
@@ -12362,6 +12746,10 @@ window.PT.EQ_TABLE = "4S4B4C3d4o4e4Z4g3c3d4J4Y7l0j00070l1E1Z1e1G101d2h3B7b4Jz2zk
     /* --- Range-Designer --- */
     $('#rdRun').onclick = runRangeDesigner;
     $('#scNew').onclick = scNewQuestion;
+    S.pf.st = pfLoad();
+    $('#pfMode').value = S.pf.st.mode || 'mix';
+    $('#pfNew').onclick = pfNewQuestion;
+    $('#pfMode').onchange = pfNewQuestion;
     // Auswahl merken (nur Bequemlichkeit, ohne Speicher geht es mit "optimal" los)
     try { const v = localStorage.getItem('pt.sc.vs'); if (v && $('#scVs').querySelector(`option[value="${v}"]`)) $('#scVs').value = v; } catch (e) { }
     $('#scVs').onchange = () => { try { localStorage.setItem('pt.sc.vs', $('#scVs').value); } catch (e) { } };

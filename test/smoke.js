@@ -2,7 +2,7 @@
 global.window = {};
 const fs = require('fs'), path = require('path');
 const base = path.join(__dirname, '..', 'js');
-for (const f of ['engine.js', 'review.js', 'ranges.js', 'strategy.js', 'handprofile.js', 'plan.js', 'tips.js', 'mental.js', 'eqtable.js', 'icm.js', 'multiway.js', 'w2d.js', 'w2dstats.js', 'w2daudit.js', 'w2dleaks.js', 'w2dpost.js', 'ownhands.js', 'riverdrill.js', 'stackoff.js', 'rangeflow.js', 'course.js', 'courseui.js']) {
+for (const f of ['engine.js', 'review.js', 'ranges.js', 'strategy.js', 'handprofile.js', 'plan.js', 'tips.js', 'mental.js', 'eqtable.js', 'icm.js', 'multiway.js', 'w2d.js', 'w2dstats.js', 'w2daudit.js', 'w2dleaks.js', 'w2dpost.js', 'ownhands.js', 'riverdrill.js', 'preflopdrill.js', 'stackoff.js', 'rangeflow.js', 'course.js', 'courseui.js']) {
   eval(fs.readFileSync(path.join(base, f), 'utf8'));
 }
 const P = global.window.PT;
@@ -1635,6 +1635,40 @@ console.log('\n== Postflop-Aktionsreihenfolge ==');
     'CO vs BTN+BB: BB vor dir, BTN hinter dir — der Fall, der falsch war');
 }
 
+
+console.log('\n== Preflop-Drill ==');
+{
+  const D = P.PreflopDrill;
+  const q = (o) => Object.assign({ band: 'mid', stack: 50 }, o);
+  ok(D.grade(q({ type: 'open', pos: 'EP', hc: 'AKo' }), 'RAISE').right, 'EP AKo: Raise');
+  ok(!D.grade(q({ type: 'open', pos: 'EP', hc: 'QTo' }), 'RAISE').right, 'EP QTo: Raise ist falsch');
+  ok(D.grade(q({ type: 'open', pos: 'BTN', hc: 'QTo' }), 'RAISE').right, 'BTN QTo: Raise');
+  ok(!D.grade(q({ type: 'open', pos: 'CO', hc: 'AQs' }), 'LIMP').right, 'Open-Limp außerhalb des SB ist falsch');
+  ok(D.grade(q({ type: 'open', pos: 'SB', hc: 'AJo' }), 'LIMP').grade === 'ok2', 'SB-Limp mit Range-Hand: vertretbar');
+  const sbJJ = q({ type: 'vs', pos: 'SB', opener: 'CO', hc: 'JJ' });
+  ok(D.grade(sbJJ, '3B').right && D.grade(sbJJ, 'CALL').grade === 'warn', 'SB gegen CO, JJ: 3-Bet; Call = falsche Art');
+  ok(!D.grade(q({ type: 'vs', pos: 'SB', opener: 'EP', hc: 'A8o' }), 'CALL').right, 'SB A8o gegen EP: Call ist falsch');
+  ok(D.vsIdeal(D.vsModel('BB', 'EP', 'mid'), 'TT')[0] === 'CALL', 'BB gegen EP, TT: Call (Lücke 22-99 / JJ+ geschlossen)');
+  ok(D.vsIdeal(D.vsModel('CO', 'EP', 'mid'), 'JJ')[0] === 'CALL', 'CO gegen EP, JJ: nicht Fold');
+  ok(D.vsIdeal(D.vsModel('BTN', 'CO', 'mid'), 'A7s')[0] === 'FOLD', 'A6s-A9s bleiben außen vor (Wheel-Asse sind Absicht)');
+  ok(D.vsIdeal(D.vsModel('BTN', 'EP', 'mid'), 'K9o')[0] === 'FOLD', 'BTN K9o gegen EP: Fold');
+  const SP = [['MP', 'EP'], ['CO', 'EP'], ['CO', 'MP'], ['BTN', 'EP'], ['BTN', 'MP'], ['BTN', 'CO'], ['SB', 'EP'], ['SB', 'MP'], ['SB', 'CO'], ['SB', 'BTN'], ['BB', 'EP'], ['BB', 'MP'], ['BB', 'CO'], ['BB', 'BTN'], ['BB', 'SB']];
+  const holes = [];
+  for (const b of ['short', 'mid']) for (const [h, v] of SP) for (const hc of ['AA', 'KK', 'QQ', 'JJ', 'TT', 'AKs', 'AQs', 'AKo'])
+    if (D.vsIdeal(D.vsModel(h, v, b), hc)[0] === 'FOLD') holes.push(b + ' ' + h + '/' + v + ' ' + hc);
+  ok(!holes.length, 'TT+, AQs+, AKo werden gegen jedes Open gespielt' + (holes.length ? ' — ' + holes.join(', ') : ''));
+  let seed = 7; const rr = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  let valid = true, folds = 0;
+  for (let i = 0; i < 600; i++) {
+    const x = D.make('mix', rr), g = D.grade(x, 'FOLD');
+    if (x.cards.length !== 2 || P.handClassOf(x.cards) !== x.hc || !g.ideal.length) valid = false;
+    if (g.ideal[0] === 'FOLD') folds++;
+  }
+  ok(valid, '600 Fragen: Karten passen zur Handklasse, jede hat eine Antwort');
+  ok(folds > 150 && folds < 450, 'Fold ist nicht immer die Antwort (' + folds + ' von 600)');
+  ok(D.make('open', rr).type === 'open' && D.make('vs', rr).type === 'vs', 'Modus open/vs wird eingehalten');
+  ok(P.Course.UNITS.every(u => u.tasks.some(t => t.jump && t.jump.preflop)), 'Jede Kurs-Einheit enthält den Preflop-Drill');
+}
 console.log('\n== River-Filter (Drill) ==');
 {
   const RD = P.RiverDrill;

@@ -24,6 +24,7 @@
     hp: { sel: 'AKo', rangeKey: 'bb_vs_btn_def', cache: {}, evCache: {}, busy: false },
     rd: { cache: {} },
     sc: { cache: {}, q: null, busy: false },
+    pf: { st: null, q: null, rep: null, answered: null },
     rf: { q: null, ev: null, picked: null, raise: null },
     mt: load('pt_mental', { right: 0, total: 0, streak: 0, best: 0 }),
     own: { id: null, step: 0, picks: [] }
@@ -1704,6 +1705,107 @@
     scRenderScore();
   }
 
+  /* ============================ PREFLOP-DRILL ======================= *
+   * Öffnen, callen, 3-betten — gegen die Ranges des Trainers. Logik und
+   * Herkunft der Antworten in js/preflopdrill.js; hier Frage, Antwort,
+   * Darstellung und eine eigene kleine Wiederholung: falsch beantwortete
+   * Entscheidungen kommen nach den Leitner-Regeln aus review.js wieder.  */
+  const PF_STORE = 'pt_preflop';
+  function pfLoad() {
+    const d = load(PF_STORE, {});
+    return Object.assign({ right: 0, total: 0, day: null, items: [], mode: 'mix' }, d);
+  }
+  function pfSave() { try { localStorage.setItem(PF_STORE, JSON.stringify(S.pf.st)); } catch (e) { } }
+  function pfToday() {
+    const t = new Date(), d = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
+    const st = S.pf.st;
+    if (!st.day || st.day.d !== d) st.day = { d, n: 0, right: 0, start: Date.now() };
+    return st.day;
+  }
+
+  function pfNewQuestion() {
+    const D = P.PreflopDrill, st = S.pf.st, mode = $('#pfMode').value;
+    st.mode = mode;
+    // Fällige Wiederholungen zuerst — aber nicht zweimal dieselbe hintereinander.
+    const due = RV.due(st.items).filter(i => !S.pf.q || i.id !== D.keyOf(S.pf.q))
+      .filter(i => mode === 'mix' || i.q.type === mode);
+    let q, rep = null;
+    if (due.length && P.rng() < 0.5) {
+      rep = due[0];
+      q = Object.assign({}, rep.q, { cards: pfCards(rep.q.hc) });   // neue Farben, gleiche Entscheidung
+    } else q = D.make(mode);
+    S.pf.q = q; S.pf.rep = rep;
+    const opts = D.options(q);
+    $('#pfOut').innerHTML = `
+      <div class="scask">${rep ? '<span class="chip">Wiederholung</span> ' : ''}${D.text(q)} Du hältst ${miniCards(q.cards)} <b>${q.hc}</b>.</div>
+      <div class="opts" id="pfOpts"></div>`;
+    const wrap = $('#pfOpts');
+    opts.forEach(k => {
+      const b = document.createElement('button');
+      b.className = 'opt'; b.textContent = D.LABEL[k];
+      b.onclick = () => pfAnswer(k);
+      wrap.appendChild(b);
+    });
+    pfRenderScore();
+  }
+
+  /** Karten zu einer Handklasse würfeln (für Wiederholungen). */
+  function pfCards(hc) {
+    const S_ = 'cdhs', s1 = S_[(P.rng() * 4) | 0];
+    let s2 = s1;
+    if (hc.length === 2 || hc[2] === 'o') { do { s2 = S_[(P.rng() * 4) | 0]; } while (s2 === s1); }
+    return [P.cardFromStr(hc[0] + s1), P.cardFromStr(hc[1] + s2)];
+  }
+
+  function pfRenderScore() {
+    const day = pfToday(), min = Math.round((Date.now() - day.start) / 60000);
+    const due = RV.due(S.pf.st.items).length;
+    $('#pfScore').textContent = day.n
+      ? `Heute ${day.right} von ${day.n} richtig · ${min} min${due ? ` · ${due} zur Wiederholung` : ''}`
+      : due ? `${due} zur Wiederholung fällig` : '';
+  }
+
+  function pfAnswer(key) {
+    const D = P.PreflopDrill, q = S.pf.q; if (!q || S.pf.answered === q) return;
+    S.pf.answered = q;
+    const g = D.grade(q, key), st = S.pf.st, day = pfToday();
+    st.total++; day.n++; if (g.right) { st.right++; day.right++; }
+    // Wiederholung: falsche Entscheidungen merken, richtige hochstufen.
+    const id = D.keyOf(q);
+    let item = st.items.find(i => i.id === id);
+    if (!g.right && !item) { item = { id, q: { type: q.type, pos: q.pos, opener: q.opener, band: q.band, stack: q.stack, hc: q.hc }, box: 1 }; st.items.push(item); }
+    if (item) RV.applyResult(st, item, g.right);
+    RV.trim(st);
+    pfSave();
+
+    const isOpen = q.type === 'open';
+    const cls = k => k === '3B' ? 'rdp' : k === 'RAISE' ? 'rdp' : k === 'CALL' ? 'rdc' : 'rdf';
+    let n3 = 0, nc = 0;
+    const w = hc => (hc.length === 2 ? 6 : hc[2] === 's' ? 4 : 12) / 13.26;
+    const grid = P.HandProfile.allHandClasses().map(hc => {
+      const k = D.idealFor(q, hc);
+      if (k === '3B' || k === 'RAISE') n3 += w(hc); else if (k === 'CALL') nc += w(hc);
+      return `<button class="hpcell ${cls(k)}${hc === q.hc ? ' scme' : ''}" title="${hc}: ${D.LABEL[k]}">${hc}</button>`;
+    }).join('');
+    const legend = isOpen
+      ? `<span><i style="background:var(--acc2)"></i>Raise (${n3.toFixed(1)} %)</span><span><i style="background:#1b2621"></i>Fold</span>`
+      : `<span><i style="background:var(--acc2)"></i>3-Bet (${n3.toFixed(1)} %)</span>${g.model.sb ? '' : `<span><i style="background:var(--warn)"></i>Call (${nc.toFixed(1)} %)</span>`}<span><i style="background:#1b2621"></i>Fold</span>`;
+    const head = g.grade === 'ok' ? 'Richtig' : g.grade === 'ok2' ? 'Vertretbar' : g.grade === 'warn' ? 'Spielbar, aber falsche Art' : 'Falsch';
+    $('#pfOut').innerHTML = `
+      <div class="verdict ${g.grade}">
+        ${head} — ${miniCards(q.cards)} <b>${q.hc}</b> ${isOpen ? `aus ${q.pos}` : `in ${q.pos} gegen ${q.opener}`}: <b>${g.ideal.map(k => D.LABEL[k]).join(' oder ')}</b>
+        <small>Du: ${D.LABEL[key]} · ${q.stack}bb</small>
+      </div>
+      <div class="hpnote-sm">${g.why}</div>
+      <div class="hpgridwrap" style="margin-top:.6rem"><div class="hpgrid">${grid}</div></div>
+      <div class="hplegend">${legend}</div>
+      <div class="hpnote-sm">Range: ${isOpen ? g.model.src : `${q.pos} gegen ${q.opener} — ${g.model.src}`}. Das sind die Näherungen des Trainers, keine Solver-Charts mit Ante.</div>
+      <div class="planactions" style="margin-top:.6rem"><button class="primary" id="pfNext">Nächste Frage ▸</button></div>`;
+    $('#pfNext').onclick = pfNewQuestion;
+    $('#pfNext').focus();
+    pfRenderScore();
+  }
+
   /* ============================ RIVER-FILTER ======================== *
    * Ein Paar, zweimal gecallt, er checkt zum dritten Mal. Die Rechnung
    * steht in js/riverdrill.js; hier nur Frage, Antwort und Darstellung.
@@ -2961,6 +3063,7 @@
     if (v === 'plan') { if (P.Course) P.Course.render($('#planOut')); else renderPlan(); }
     if (v === 'verlauf' && !$('#rfRoot').children.length) P.RangeFlow.mount($('#rfRoot'));
     if (v === 'range' && !$('#rdOut').children.length) { runRangeDesigner(); scNewQuestion(); }
+    if (v === 'range' && !$('#pfOut').children.length) pfNewQuestion();
     if (v === 'rechnen' && !$('#mtOpts').children.length) { mtScore(); mtNew(); renderSizings(); rfNew(); soNext(); }
     if (v === 'haende' && !$('#hpGrid').children.length) {
       renderHpGrid();
@@ -3022,6 +3125,12 @@
         try { localStorage.setItem('pt_cfg', JSON.stringify(S.cfg)); } catch (e) { }
         cfgToUI(); switchView('trainer'); newHand();
       },
+      /** Preflop-Drill im Tab Range öffnen, optional mit Modus (mix/open/vs). */
+      startPreflop(mode) {
+        if (mode) $('#pfMode').value = mode;
+        switchView('range'); pfNewQuestion();
+        $('#pfPanel').scrollIntoView({ block: 'start' });
+      },
       stats: () => S.stats,
       reviewDue: () => RV.due(S.review.items).length
     };
@@ -3077,6 +3186,10 @@
     /* --- Range-Designer --- */
     $('#rdRun').onclick = runRangeDesigner;
     $('#scNew').onclick = scNewQuestion;
+    S.pf.st = pfLoad();
+    $('#pfMode').value = S.pf.st.mode || 'mix';
+    $('#pfNew').onclick = pfNewQuestion;
+    $('#pfMode').onchange = pfNewQuestion;
     // Auswahl merken (nur Bequemlichkeit, ohne Speicher geht es mit "optimal" los)
     try { const v = localStorage.getItem('pt.sc.vs'); if (v && $('#scVs').querySelector(`option[value="${v}"]`)) $('#scVs').value = v; } catch (e) { }
     $('#scVs').onchange = () => { try { localStorage.setItem('pt.sc.vs', $('#scVs').value); } catch (e) { } };
