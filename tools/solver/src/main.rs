@@ -163,6 +163,12 @@ fn solve_spot(s: &Spot, exploit_pct: f32, max_iter: u32) -> Result<String, Strin
     // Komprimiert, wenn unkomprimiert mehr als 4 GB nötig wären.
     let compress = gb(mem) > 4.0;
     eprintln!("  Speicher {:.2} GB ({:.2} GB komprimiert) -> {}", gb(mem), gb(mem_c), if compress { "komprimiert" } else { "32-bit" });
+    // Notebook hat 16 GB: was auch komprimiert über 9 GB braucht, würde
+    // auslagern und die Nacht blockieren — überspringen statt hängen.
+    let limit = std::env::var("PT_MAX_GB").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(9.0);
+    if gb(mem_c) > limit {
+        return Err(format!("zu groß ({:.1} GB komprimiert > {:.0} GB), übersprungen", gb(mem_c), limit));
+    }
     game.allocate_memory(compress);
 
     let t0 = Instant::now();
