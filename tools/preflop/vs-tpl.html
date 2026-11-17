@@ -1,0 +1,89 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calls und 3-Bets</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--ink:#1d1d1b;--mute:#6b6a65;--line:#dedcd5;
+--ok:#2f8f5b;--okbg:#d8efe1;--warn:#b7791f;--warnbg:#fbe9c8;--bad:#c0392b;--badbg:#f7d4cf;--nil:#efeee9;--kind:#6a4aa8;--kindbg:#e6ddf5;}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17171a;--card:#202024;--ink:#ecebe6;--mute:#9b9a94;--line:#34343a;
+--ok:#5cc58a;--okbg:#1f3a2b;--warn:#e0a84a;--warnbg:#3d3120;--bad:#ef7a6c;--badbg:#45231f;--nil:#26262b;--kind:#b9a0ea;--kindbg:#2f2742;}}
+:root[data-theme="dark"]{--bg:#17171a;--card:#202024;--ink:#ecebe6;--mute:#9b9a94;--line:#34343a;--ok:#5cc58a;--okbg:#1f3a2b;--warn:#e0a84a;--warnbg:#3d3120;--bad:#ef7a6c;--badbg:#45231f;--nil:#26262b;--kind:#b9a0ea;--kindbg:#2f2742;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 60px}h1{font-size:24px;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 18px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}.bar button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 14px;font:inherit;cursor:pointer}
+.bar button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:13px;color:var(--mute);margin:6px 0 16px}.legend i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+.pos{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px}
+.pos h2{font-size:18px;margin:0 0 2px}.pos .stat{color:var(--mute);font-size:13px;margin:0 0 4px}.pos .src{color:var(--mute);font-size:12px;margin:0 0 12px}
+.wrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px}@media (max-width:760px){.wrap{grid-template-columns:1fr}}
+.grid{display:grid;grid-template-columns:repeat(13,1fr);gap:2px}
+.c{aspect-ratio:1;border-radius:3px;background:var(--nil);font-size:clamp(7px,1.2vw,11px);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;color:var(--mute)}
+.c b{font-weight:600}.c small{font-size:.85em}
+.c.in{box-shadow:inset 0 0 0 1.5px var(--ok)}
+.c.good{background:var(--okbg);color:var(--ok)}.c.tight{background:var(--warnbg);color:var(--warn)}.c.loose{background:var(--badbg);color:var(--bad)}.c.kind{background:var(--kindbg);color:var(--kind)}
+h3{font-size:14px;margin:0 0 6px}ul{margin:0 0 14px;padding:0;list-style:none}li{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid var(--line);font-size:14px}
+li span:last-child{color:var(--mute);text-align:right}.none{color:var(--mute);font-size:14px;margin:0 0 14px}
+.note{color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:12px;margin-top:24px}
+</style></head><body><main>
+<h1>Calls und 3-Bets gegen Opens</h1>
+<p class="sub" id="sub"></p>
+<div class="bar" id="bands"></div>
+<div class="bar" id="opens"></div>
+<div class="legend">
+<span><i style="background:var(--okbg);box-shadow:inset 0 0 0 1.5px var(--ok)"></i>wie das Modell gespielt</span>
+<span><i style="background:var(--badbg)"></i>zu loose: gecallt oder 3-gebettet, Modell foldet</span>
+<span><i style="background:var(--warnbg);box-shadow:inset 0 0 0 1.5px var(--ok)"></i>zu tight: gefoldet, Modell spielt</span>
+<span><i style="background:var(--kindbg);box-shadow:inset 0 0 0 1.5px var(--ok)"></i>falsche Art: Call statt 3-Bet oder umgekehrt</span>
+<span><i style="background:var(--nil)"></i>gefoldet, richtig</span>
+</div>
+<div id="out"></div>
+<p class="note">In der Zelle: <b>Calls · 3-Bets / bekommen</b>. Gezählt sind nur saubere Spots: genau ein Open vor dir, kein Limper, kein Caller dazwischen, Opener nicht all-in, mehr als 15 bb effektiv zwischen dir und dem Opener. Squeeze- und Multiway-Spots fehlen also. Ideal ist die Call- bzw. 3-Bet-Range des Trainers für genau diese Positionen (bis 35 bb die Kurzstack-Variante). Wo das Modell keine eigene Range hat, steht die nächstliegende darunter als „genähert“. Im Small Blind kennt das Modell nur 3-Bet oder Fold: Hände aus der 3-Bet-Range oder der Cold-Call-Range des Buttons gelten dort als spielbar (als 3-Bet). Ein SB-Call mit ihnen zählt als „falsche Art“, mit allem anderen als „zu loose“. Bei kurzen Stacks ist eine 3-Bet meist ein All-in; das Modell unterscheidet das nicht. Kleine 3-Bet-Ranges sind Näherungen ohne Bluff-Mix — eine einzelne 3-Bet mit einer Call-Hand ist kein Fehler, ein Muster schon. Pro Zelle sind es meist 1–3 Fälle.</p>
+</main><script>
+/*DATA*/
+const R='AKQJT98765432';const POS=[['EP','UTG+1 gegen UTG'],['MP','MP / HJ'],['CO','CO'],['BTN','Button'],['SB','Small Blind'],['BB','Big Blind']];
+const BANDS=[['all','Alle über 15 bb',15,999],['short','15–35 bb',15,35],['deep','über 35 bb',35,999]];
+const OPENS=[['all','gegen jeden Opener',['EP','MP','CO','BTN','SB']],['early','gegen EP / MP',['EP','MP']],['late','gegen CO / BTN / SB',['CO','BTN','SB']]];
+let band='all',opens='all';try{band=localStorage.getItem('pt.vs.band')||'all';opens=localStorage.getItem('pt.vs.opens')||'all'}catch(e){}
+const cellName=(i,j)=>i===j?R[i]+R[j]:i<j?R[i]+R[j]+'s':R[j]+R[i]+'o';
+const PN={EP:'EP',MP:'MP',CO:'CO',BTN:'BTN',SB:'SB'};
+function bar(id,list,cur,set){document.getElementById(id).innerHTML=list.map(b=>`<button aria-pressed="${b[0]===cur}" data-b="${b[0]}">${b[1]}</button>`).join('');document.querySelectorAll('#'+id+' button').forEach(x=>x.onclick=()=>{set(x.dataset.b);render()});}
+function render(){
+ bar('bands',BANDS,band,v=>{band=v;try{localStorage.setItem('pt.vs.band',v)}catch(e){}});
+ bar('opens',OPENS,opens,v=>{opens=v;try{localStorage.setItem('pt.vs.opens',v)}catch(e){}});
+ const [,,lo,hi]=BANDS.find(b=>b[0]===band);const ok=OPENS.find(o=>o[0]===opens)[2];
+ let html='';
+ for(const [p,label] of POS){
+  const rs=ROWS.filter(r=>r[0]===p&&ok.includes(r[1])&&r[4]>lo&&r[4]<=hi);if(!rs.length)continue;
+  const agg={};let nc=0,n3=0,mc=0,m3=0;const srcs=new Set();
+  for(const [,v,c,a,eff] of rs){const m=MODEL[`${p}|${v}|${eff<=35?'short':'mid'}`];srcs.add(`gegen ${PN[v]}: ${m.src}`);
+   const inC=m.call.includes(c),in3=m.tb.includes(c);const g=agg[c]=agg[c]||{n:0,f:0,c:0,t:0,loose:[],tight:[],kind:[],inN:0};
+   g.n++;g[a==='3'?'t':a]++;if(a==='c')nc++;if(a==='3')n3++;if(in3||(m.sb&&inC))m3++;else if(inC)mc++;if(inC||in3)g.inN++;
+   const vs=PN[v];
+   if(a!=='f'&&!inC&&!in3)g.loose.push(`${a==='c'?'Call':'3-Bet'} vs ${vs}`);
+   else if(a==='f'&&(inC||in3))g.tight.push(`Fold vs ${vs} (Modell: ${in3||m.sb?'3-Bet':'Call'})`);
+   else if(m.sb&&a==='c')g.kind.push(`Call vs ${vs} (Modell: 3-Bet oder Fold)`);
+   else if(a==='c'&&!inC&&in3)g.kind.push(`Call vs ${vs} (Modell: 3-Bet)`);
+   else if(a==='3'&&!in3&&inC&&!m.sb)g.kind.push(`3-Bet vs ${vs} (Modell: Call)`);}
+  let cells='';const L=[],T=[],K=[];
+  for(let i=0;i<13;i++)for(let j=0;j<13;j++){const c=cellName(i,j),g=agg[c];let k='c';let t='';
+   if(g){t=`<small>${g.c}·${g.t}/${g.n}</small>`;if(g.inN)k+=' in';
+    if(g.loose.length){k+=' loose';L.push([c,g.loose,g.n]);}
+    if(g.tight.length){if(!g.loose.length)k+=' tight';T.push([c,g.tight,g.n]);}
+    if(g.kind.length){if(!g.loose.length&&!g.tight.length)k+=' kind';K.push([c,g.kind,g.n]);}
+    if(!g.loose.length&&!g.tight.length&&!g.kind.length&&g.c+g.t>0)k+=' good';}
+   cells+=`<div class="${k}" title="${c}${g?`: ${g.n}× bekommen, ${g.c}× Call, ${g.t}× 3-Bet, ${g.f}× Fold`:''}"><b>${c}</b>${t}</div>`;}
+  const sum=a=>a.reduce((s,x)=>s+x[1].length,0);
+  for(const a of [L,T,K])a.sort((x,y)=>y[1].length-x[1].length);
+  const grp=arr=>{const m={};arr.forEach(x=>m[x]=(m[x]||0)+1);return Object.entries(m).map(([k,n])=>n>1?`${n}× ${k}`:k).join(', ')};
+  const li=arr=>arr.length?'<ul>'+arr.map(([c,e,n])=>`<li><span><b>${c}</b></span><span>${grp(e)}${n>e.length?` <small>(von ${n})</small>`:''}</span></li>`).join('')+'</ul>':'<p class="none">keine</p>';
+  const pct=x=>Math.round(100*x/rs.length)+' %';
+  html+=`<section class="pos"><h2>${label}</h2><p class="stat">${rs.length}× gegen ein Open · du: Call ${pct(nc)}, 3-Bet ${pct(n3)} · Modell bei diesen Karten: Call ${pct(mc)}, 3-Bet ${pct(m3)}</p>
+  <p class="src">${[...srcs].join('<br>')}</p>
+  <div class="wrap"><div class="grid">${cells}</div><div>
+  <h3 style="color:var(--bad)">Zu loose (${sum(L)}×)</h3>${li(L)}
+  <h3 style="color:var(--warn)">Zu tight (${sum(T)}×)</h3>${li(T)}
+  <h3 style="color:var(--kind)">Falsche Art (${sum(K)}×)</h3>${li(K)}
+  </div></div></section>`;}
+ document.getElementById('out').innerHTML=html||'<p class="none">Keine Hände in dieser Auswahl.</p>';
+ document.getElementById('sub').textContent=`${SPAN[2].toLocaleString('de-AT')} Hände vom ${SPAN[0].split('-').reverse().join('.')} bis ${SPAN[1].split('-').reverse().join('.')} · ${ROWS.length} Entscheidungen gegen ein Open`;
+}
+render();
+</script></body></html>

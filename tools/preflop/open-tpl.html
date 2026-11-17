@@ -1,0 +1,75 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Deine Open-Ranges</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--ink:#1d1d1b;--mute:#6b6a65;--line:#dedcd5;
+--ok:#2f8f5b;--okbg:#d8efe1;--warn:#b7791f;--warnbg:#fbe9c8;--bad:#c0392b;--badbg:#f7d4cf;--nil:#efeee9;--limp:#7b4fb0;}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17171a;--card:#202024;--ink:#ecebe6;--mute:#9b9a94;--line:#34343a;
+--ok:#5cc58a;--okbg:#1f3a2b;--warn:#e0a84a;--warnbg:#3d3120;--bad:#ef7a6c;--badbg:#45231f;--nil:#26262b;--limp:#b38be0;}}
+:root[data-theme="dark"]{--bg:#17171a;--card:#202024;--ink:#ecebe6;--mute:#9b9a94;--line:#34343a;--ok:#5cc58a;--okbg:#1f3a2b;--warn:#e0a84a;--warnbg:#3d3120;--bad:#ef7a6c;--badbg:#45231f;--nil:#26262b;--limp:#b38be0;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 60px}h1{font-size:24px;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 18px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.bar button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 14px;font:inherit;cursor:pointer}
+.bar button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:13px;color:var(--mute);margin:0 0 16px}.legend i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+.pos{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px}
+.pos h2{font-size:18px;margin:0 0 2px}.pos .stat{color:var(--mute);font-size:13px;margin:0 0 12px}
+.wrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px}@media (max-width:760px){.wrap{grid-template-columns:1fr}}
+.grid{display:grid;grid-template-columns:repeat(13,1fr);gap:2px}
+.c{aspect-ratio:1;border-radius:3px;background:var(--nil);font-size:clamp(7px,1.2vw,11px);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;color:var(--mute);position:relative}
+.c b{font-weight:600}.c small{font-size:.85em}
+.c.in{box-shadow:inset 0 0 0 1.5px var(--ok)}
+.c.good{background:var(--okbg);color:var(--ok)}.c.miss{background:var(--warnbg);color:var(--warn)}.c.loose{background:var(--badbg);color:var(--bad)}
+.c.limp::after{content:"";position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--limp)}
+h3{font-size:14px;margin:0 0 6px}ul{margin:0 0 14px;padding:0;list-style:none}li{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid var(--line);font-size:14px}
+li span:last-child{color:var(--mute);white-space:nowrap}.none{color:var(--mute);font-size:14px;margin:0 0 14px}
+.note{color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:12px;margin-top:24px}
+</style></head><body><main>
+<h1>Deine Open-Ranges</h1>
+<p class="sub" id="sub"></p>
+<div class="bar" id="bands"></div>
+<div class="legend">
+<span><i style="background:var(--okbg);box-shadow:inset 0 0 0 1.5px var(--ok)"></i>gehört rein, immer geraist</span>
+<span><i style="background:var(--warnbg);box-shadow:inset 0 0 0 1.5px var(--ok)"></i>gehört rein, mal liegen gelassen oder gelimpt</span>
+<span><i style="background:var(--badbg)"></i>gehört nicht rein, trotzdem gespielt</span>
+<span><i style="background:var(--nil)"></i>nicht drin, gefoldet</span>
+<span><i style="background:var(--nil);box-shadow:inset 0 0 0 1.5px var(--ok)"></i>gehört rein, nie bekommen</span>
+<span><i style="background:var(--limp);border-radius:50%;width:8px;height:8px;vertical-align:1px"></i>mindestens einmal gelimpt</span>
+</div>
+<div id="out"></div>
+<p class="note">Zahl in der Zelle: <b>gespielt / bekommen</b>. Gezählt sind nur Hände, in denen du Erster im Pot warst, mit mehr als 15 bb effektiv (darunter gilt Push/Fold). „Gehört rein“ heißt: steht in der Open-Range des Trainers (bis 35 bb die gestraffte Kurzstack-Variante). Das sind Näherungen, keine Solver-Charts mit Ante — mit Ante dürfen vor allem CO, BTN und SB etwas weiter öffnen. EP = UTG und UTG+1, MP = die Plätze bis vor den CO, meist an 7–8er-Tischen. Für Limps aus dem SB hat der Trainer keine Strategie; dort zählt nur Raise als „gespielt wie das Modell“. Pro Hand sind es meist nur 1–5 Fälle — einzelne Zellen sind Zufall, die Muster über viele Zellen nicht.</p>
+</main><script>
+/*DATA*/
+const R='AKQJT98765432';const POS=[['EP','EP (UTG, UTG+1)'],['MP','MP / HJ'],['CO','CO'],['BTN','Button'],['SB','Small Blind']];
+const BANDS=[['all','Alle über 15 bb',15,999],['short','15–35 bb',15,35],['deep','über 35 bb',35,999]];
+let band='all';try{band=localStorage.getItem('pt.open.band')||'all'}catch(e){}
+const cellName=(i,j)=>i===j?R[i]+R[j]:i<j?R[i]+R[j]+'s':R[j]+R[i]+'o';
+function render(){
+ const [,,lo,hi]=BANDS.find(b=>b[0]===band);
+ document.getElementById('bands').innerHTML=BANDS.map(b=>`<button aria-pressed="${b[0]===band}" data-b="${b[0]}">${b[1]}</button>`).join('');
+ document.querySelectorAll('#bands button').forEach(x=>x.onclick=()=>{band=x.dataset.b;try{localStorage.setItem('pt.open.band',band)}catch(e){}render()});
+ let html='';
+ for(const [p,label] of POS){
+  const rs=ROWS.filter(r=>r[0]===p&&r[3]>lo&&r[3]<=hi);if(!rs.length)continue;
+  const agg={};let inSum=0,played=0,limps=0;
+  for(const [,c,a,eff] of rs){const inR=MODEL[p][eff<=35?'short':'mid'].includes(c);const g=agg[c]=agg[c]||{n:0,r:0,l:0,f:0,inN:0};g.n++;g[a]++;if(inR){g.inN++;inSum++;}if(a!=='f')played++;if(a==='l')limps++;}
+  const inModel=c=>band==='short'?MODEL[p].short.includes(c):MODEL[p].mid.includes(c);
+  let cells='';const loose=[],miss=[];
+  for(let i=0;i<13;i++)for(let j=0;j<13;j++){const c=cellName(i,j),g=agg[c],inR=g?g.inN>0:inModel(c);let k='c'+(inR?' in':'');let t='';
+   if(g){const pl=g.r+g.l;t=`<small>${pl}/${g.n}</small>`;
+    if(inR){k+=pl===g.n&&g.l===0?' good':' miss';if(g.f+g.l>0)miss.push([c,g]);}
+    else if(pl>0){k+=' loose';loose.push([c,g]);}
+    if(g.l)k+=' limp';}
+   cells+=`<div class="${k}" title="${c}${g?`: ${g.n}× bekommen, ${g.r}× geraist, ${g.l}× gelimpt, ${g.f}× gefoldet`:''}"><b>${c}</b>${t}</div>`;}
+  loose.sort((a,b)=>(b[1].r+b[1].l)-(a[1].r+a[1].l));miss.sort((a,b)=>(b[1].f+b[1].l)-(a[1].f+a[1].l));
+  const li=(arr,f)=>arr.length?'<ul>'+arr.map(([c,g])=>`<li><span><b>${c}</b></span><span>${f(g)}</span></li>`).join('')+'</ul>':'<p class="none">keine</p>';
+  const pct=x=>Math.round(100*x/rs.length)+' %';
+  html+=`<section class="pos"><h2>${label}</h2><p class="stat">${rs.length}× Erster im Pot · du hast ${pct(played)} gespielt${limps?` (davon ${limps} Limps)`:''} · laut Modell wären es ${pct(inSum)} dieser Hände gewesen</p>
+  <div class="wrap"><div class="grid">${cells}</div><div>
+  <h3 style="color:var(--bad)">Zu oft gespielt (${loose.reduce((s,x)=>s+x[1].r+x[1].l,0)}×)</h3>${li(loose,g=>`${g.r+g.l} von ${g.n}${g.l?` · ${g.l}× Limp`:''}`)}
+  <h3 style="color:var(--warn)">Hättest du raisen sollen (${miss.reduce((s,x)=>s+x[1].f+x[1].l,0)}×)</h3>${li(miss,g=>`${g.f?g.f+'× gefoldet':''}${g.f&&g.l?', ':''}${g.l?g.l+'× gelimpt':''} von ${g.n}`)}
+  </div></div></section>`;}
+ document.getElementById('out').innerHTML=html;
+ document.getElementById('sub').textContent=`${SPAN[2].toLocaleString('de-AT')} Hände vom ${SPAN[0].split('-').reverse().join('.')} bis ${SPAN[1].split('-').reverse().join('.')} · deine Opens gegen die Trainer-Ranges`;
+}
+render();
+</script></body></html>
